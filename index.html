@@ -167,36 +167,29 @@ body{
 .glass-card .rules-footer{ margin-top:30px; display:flex; justify-content:flex-end; gap:12px; }
 .glass-card .cite{ margin-top:22px; font-size:.76rem; color:#a1a1a6; }
 
-/* ---------- Map selection: floating tiles (no card metaphor) ---------- */
+/* ---------- Map selection: stacked card deck ---------- */
 #screen-mapselect{ z-index:10; }
-.float-grid{
-  display:grid; grid-template-columns:repeat(4, 170px); grid-template-rows:repeat(2, 170px);
-  gap:36px 42px; justify-content:center; align-content:center;
+.deck{
+  position:relative; width:460px; height:300px;
+  perspective:1400px;
 }
-.float-tile{
-  position:relative; width:170px; height:170px; border-radius:38px;
-  background:#fff; cursor:pointer;
-  box-shadow:0 10px 22px rgba(0,0,0,.06), inset 0 0 0 1px var(--hairline-soft);
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  transition: box-shadow .35s var(--ease-out), transform .35s var(--ease-spring), opacity .4s var(--ease-out);
-  animation: tile-float 5s ease-in-out infinite;
-  will-change: transform;
+.map-card{
+  position:absolute; left:0; top:0; width:460px; height:300px;
+  background:#fff; border-radius:24px; cursor:pointer; overflow:hidden;
+  box-shadow:0 2px 10px rgba(0,0,0,.08), inset 0 0 0 1px var(--hairline-soft);
+  transition: transform .5s var(--ease-spring), box-shadow .4s var(--ease-out), opacity .4s var(--ease-out);
+  transform-origin:center bottom;
 }
-.float-tile .tile-thumb{ position:relative; width:120px; height:76px; pointer-events:none; }
-.float-tile .tile-label{ margin-top:8px; font-size:.86rem; font-weight:700; color:var(--ink); pointer-events:none; }
-.float-tile .tile-sub{ font-size:.66rem; color:var(--ink-soft); margin-top:2px; text-align:center; padding:0 12px; line-height:1.3; pointer-events:none; }
-.float-tile:hover{
-  animation-play-state:paused;
-  transform:translateY(-14px) scale(1.07);
-  box-shadow:0 26px 42px rgba(0,0,0,.16), inset 0 0 0 1px var(--hairline-soft);
-}
-.float-tile.chosen{ z-index:50; animation:none; }
-.float-tile.dim{ opacity:0; transform:scale(.85); pointer-events:none; }
-@keyframes tile-float{
-  0%,100%{ transform:translateY(0px); }
-  50%{ transform:translateY(-10px); }
-}
-.deck-hint{ margin-top:40px; font-size:.86rem; color:var(--ink-soft); text-align:center; }
+.map-card .card-head{ padding:16px 20px 10px; }
+.map-card h3{ font-size:1.02rem; font-weight:700; }
+.map-card p{ font-size:.78rem; color:var(--ink-soft); margin-top:2px; }
+.map-card .card-thumb{ position:relative; width:100%; height:210px; }
+.map-card:hover{ box-shadow:0 26px 46px rgba(0,0,0,.16), inset 0 0 0 1px var(--hairline-soft); }
+.map-card.flying{ transition: transform .85s var(--ease-spring), opacity .6s var(--ease-out); z-index:99; }
+.deck-hint{ margin-top:26px; font-size:.86rem; color:var(--ink-soft); text-align:center; }
+.deck-index{ display:flex; gap:8px; margin-top:20px; }
+.dot{ width:7px; height:7px; border-radius:50%; background:var(--hairline); transition:background .25s; }
+.dot.active{ background:var(--ink); }
 
 /* ---------- Game screen ---------- */
 #screen-game{ z-index:10; justify-content:flex-start; padding-top:34px; }
@@ -339,7 +332,7 @@ body{
   <div id="screen-intro" class="screen active">
     <canvas id="intro-canvas"></canvas>
     <div class="intro-fore">
-      <div class="eyebrow">A Graph Algorithm Game</div>
+      <div class="eyebrow">A Turn-Based Graph Algorithm Game</div>
       <h1>Graphing</h1>
       <h2>Attacker. Defender. One bottleneck.</h2>
       <div class="btn-row">
@@ -401,11 +394,11 @@ body{
 
       <p class="cite">Inspired by a bottleneck-path problem from a national informatics olympiad; adapted and redesigned for Graphing.</p>
       <div class="rules-footer">
-      <h2>Choose Your Map</h2>
-      <p class="sub">Hover a map to preview it. Click to deploy it to the board.</p>
-      <div class="float-grid" id="deck"></div>
-      <p class="deck-hint">Every map is a rectangular expanded graph — no single edge decides the game.</p>
-  
+        <button class="btn btn-primary" id="btn-close-rules">Got it</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ MAP SELECT ============ -->
   <div id="screen-mapselect" class="screen">
     <h2>Choose Your Map</h2>
@@ -1186,50 +1179,107 @@ class UIManager{
     }
   }
 
- renderDeck(){
-    const grid = $('#deck');
-    grid.innerHTML = '';
+  renderDeck(){
+    const deck = $('#deck');
+    const dotsWrap = $('#deck-index');
+    deck.innerHTML = ''; dotsWrap.innerHTML = '';
     const maps = MapManager.maps;
+    this.deckOrder = maps.map((_,i)=>i);
 
     maps.forEach((m, i)=>{
-      const tile = document.createElement('div');
-      tile.className = 'float-tile';
-      tile.style.animationDelay = `${(i*0.35).toFixed(2)}s`;
-      tile.style.animationDuration = `${(4.2 + (i%3)*0.6).toFixed(2)}s`;
+      const card = document.createElement('div');
+      card.className = 'map-card';
+      const depth = maps.length - 1 - i;
+      card.style.zIndex = i;
+      card.style.transform = `translate(${depth*7}px, ${depth*10}px) rotate(${(i%2?1:-1)*depth*0.6}deg) scale(${1 - depth*0.02})`;
 
+      const head = document.createElement('div');
+      head.className = 'card-head';
+      head.innerHTML = `<h3>${m.title}</h3><p>${m.desc}</p>`;
       const thumb = document.createElement('div');
-      thumb.className = 'tile-thumb';
-      tile.appendChild(thumb);
+      thumb.className = 'card-thumb';
 
-      const label = document.createElement('div');
-      label.className = 'tile-label';
-      label.innerText = m.title.split(' — ')[0];
-      tile.appendChild(label);
+      card.appendChild(head);
+      card.appendChild(thumb);
+      BoardRenderer.drawThumb(thumb, m);
 
-      const sub = document.createElement('div');
-      sub.className = 'tile-sub';
-      sub.innerText = m.desc;
-      tile.appendChild(sub);
+      card.addEventListener('mouseenter', ()=>{
+        card.style.transform = `translate(${depth*7}px, ${depth*10 - 26}px) rotate(0deg) scale(1.04)`;
+      });
+      card.addEventListener('mouseleave', ()=>{
+        card.style.transform = `translate(${depth*7}px, ${depth*10}px) rotate(${(i%2?1:-1)*depth*0.6}deg) scale(${1 - depth*0.02})`;
+      });
+      card.addEventListener('click', ()=>this.flyCardToBoard(card, i));
 
-      tile.addEventListener('click', ()=>this.selectMapTile(tile, i));
-      grid.appendChild(tile);
+      deck.appendChild(card);
 
-      requestAnimationFrame(()=> BoardRenderer.drawThumb(thumb, m));
+      const dot = document.createElement('div');
+      dot.className = 'dot' + (i===0 ? ' active' : '');
+      dotsWrap.appendChild(dot);
     });
   }
 
-  selectMapTile(tile, mapIdx){
-    $$('.float-tile').forEach(t=>{
-      if(t !== tile){
-        t.classList.add('dim');
-      } else {
-        t.classList.add('chosen');
-        t.style.transform = 'translateY(-14px) scale(1.5)';
-        t.style.opacity = '0';
-      }
-    });
+  flyCardToBoard(card, mapIdx){
+    $$('.map-card').forEach(c=>{ if(c!==card){ c.style.transition='opacity .4s ease, transform .4s ease'; c.style.opacity='0'; c.style.pointerEvents='none'; } });
+    card.classList.add('flying');
+    card.style.transform = 'translate(0px,-40px) scale(1.5)';
+    card.style.opacity = '0';
     setTimeout(()=>{ this.launchGame(mapIdx); }, 520);
   }
+
+  launchGame(mapIdx){
+    this.show('screen-game');
+    this.game = new Game(mapIdx, this.humanIsAttacker, this.difficulty);
+    this.game.onFinished = (g)=>this.runUnionFindAnimation(g);
+  }
+
+  async runUnionFindAnimation(game){
+    this.show('screen-uf');
+    await sleep(250);
+    this.show('screen-game');
+    const toast = $('#uf-toast');
+    const { C, includedIds, sorted } = game.calculateFinalC();
+
+    for(const e of sorted){
+      const edgeObj = game.edges[e.id];
+      toast.innerText = `weight = ${e.weight}`;
+      toast.classList.add('show');
+      await sleep(420);
+      const isFinal = e.id === includedIds[includedIds.length-1];
+      if(isFinal){
+        edgeObj.hitEl.classList.add('critical-path');
+        edgeObj.labelEl.classList.add('critical-label');
+        toast.innerText = `Connected! C = ${C}`;
+        await sleep(900);
+        break;
+      } else {
+        edgeObj.hitEl.classList.add('uf-green');
+        edgeObj.labelEl.classList.add('uf-green-label');
+        await sleep(180);
+      }
+    }
+    toast.classList.remove('show');
+    await sleep(400);
+    this.showVictory(game, C);
+  }
+
+  showVictory(game, C){
+    const attackerWins = C > game.threshold;
+    const defenderWins = C < game.threshold;
+    let resultText, humanWon;
+    if(attackerWins){ resultText = 'Attacker Wins'; humanWon = game.humanIsAttacker; }
+    else if(defenderWins){ resultText = 'Defender Wins'; humanWon = !game.humanIsAttacker; }
+    else { resultText = 'Draw'; humanWon = null; }
+
+    $('#victory-map-label').innerText = game.mapDef.title;
+    $('#victory-c').innerText = `C = ${C}`;
+    $('#victory-result').innerText = resultText;
+    $('.victory-title').innerText = humanWon===false ? 'Defeat' : 'Victory';
+
+    this.show('screen-victory');
+    this.confetti.burst(attackerWins ? 'orange' : 'blue');
+  }
+}
 
 /* ---------------- boot ---------------- */
 window.addEventListener('DOMContentLoaded', ()=>{
