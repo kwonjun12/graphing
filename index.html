@@ -1,469 +1,1290 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Graphing - An Graph-Algorithm game</title>
+<title>Graphing — An Graph Algorithm Game</title>
 <style>
-    /* Reset & Base */
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-    body { overflow-x: hidden; background: #fff; color: #333; }
-    
-    /* PC-Only Screen */
-    #mobile-block { display: none; flex-direction: column; align-items: center; justify-content: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; z-index: 9999; }
-    @media (max-width: 768px) {
-        #mobile-block { display: flex; }
-        #app { display: none !important; }
-    }
-    #mobile-block h1 { font-size: 5rem; margin-bottom: 1rem; }
-    #mobile-block p { font-size: 1.2rem; }
+/* ============================================================
+   GRAPHING — Apple WWDC style redesign
+   Design tokens
+   - Ink:        #1d1d1f  (primary text, Apple's near-black)
+   - Secondary:  #6e6e73  (secondary text)
+   - Hairline:   #d2d2d7  (borders)
+   - Surface:    #ffffff  (page background)
+   - Fog:        #f2f2f2  (reveal overlay)
+   - Accent Blue:#0071e3  (selection)
+   - Accent Grph:#1d1d1f  (assigned edge — dark graphite)
+   - Accent Win: #ff9f0a  (critical / winning path — Apple orange)
+   - Accent Go:  #30d158  (union-find "connected" green)
+   Type
+   - Display: 'New York', 'Times New Roman', serif  (title only)
+   - UI:      -apple-system / SF-like stack
+   ============================================================ */
 
-    /* App Container */
-    #app { width: 100vw; height: 100vh; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
-    
-    /* Buttons */
-    .btn { padding: 14px 36px; border-radius: 40px; border: none; cursor: pointer; font-size: 1.1rem; transition: all 0.3s ease; margin: 0 10px; }
-    .btn-black { background: #000; color: #fff; }
-    .btn-gray { background: #b0b0b0; color: #fff; }
-    .btn:hover { opacity: 0.8; }
+:root{
+  --ink:#1d1d1f;
+  --ink-soft:#6e6e73;
+  --hairline:#d2d2d7;
+  --hairline-soft:#e8e8ed;
+  --surface:#ffffff;
+  --fog:#f2f2f2;
+  --blue:#0071e3;
+  --graphite:#3a3a3c;
+  --orange:#ff9f0a;
+  --green:#30d158;
+  --radius-squircle: 22px;
+  --ease-spring: cubic-bezier(.16,1.36,.42,1);
+  --ease-out: cubic-bezier(.22,.61,.36,1);
+}
 
-    /* Screen Base */
-    .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; flex-direction: column; align-items: center; justify-content: center; background: #fff; }
-    .screen.active { display: flex; }
+*{ box-sizing:border-box; margin:0; padding:0; }
+html,body{ width:100%; height:100%; }
+body{
+  font-family:-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+  background:var(--surface);
+  color:var(--ink);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
 
-    /* Intro Screen */
-    #screen-intro { transition: filter 0.5s ease; z-index: 10; }
-    #screen-intro.blur-active { filter: blur(15px); pointer-events: none; }
-    .title-group { text-align: center; margin-bottom: 50px; }
-    #screen-intro h1 { font-size: 7rem; font-family: 'Times New Roman', Times, serif; font-weight: normal; margin-bottom: 10px; letter-spacing: 2px; }
-    #screen-intro h2 { font-size: 1.8rem; font-weight: 300; color: #666; font-family: 'Times New Roman', Times, serif; letter-spacing: 1px; }
+/* ---------- PC-only gate ---------- */
+#mobile-block{
+  display:none; position:fixed; inset:0; z-index:9999;
+  flex-direction:column; align-items:center; justify-content:center;
+  background:var(--surface); text-align:center; padding:40px;
+}
+@media (max-width:900px){
+  #mobile-block{ display:flex; }
+  #app{ display:none !important; }
+}
+#mobile-block h1{ font-family:"Times New Roman", Times, serif; font-size:3.4rem; font-weight:400; margin-bottom:14px; }
+#mobile-block p{ font-size:1.05rem; color:var(--ink-soft); max-width:360px; line-height:1.5; }
 
-    /* Rules Screen */
-    #screen-rules { z-index: 50; background: rgba(255, 255, 255, 0.95); }
-    .rules-content { max-width: 800px; text-align: left; background: #fafafa; padding: 40px; border-radius: 12px; border: 1px solid #ddd; }
-    .rules-content h2 { margin-bottom: 20px; font-size: 2rem; }
-    .rules-content p, .rules-content li { font-size: 1.1rem; line-height: 1.6; margin-bottom: 10px; }
-    .rules-content ul { margin-left: 20px; margin-bottom: 20px; }
+/* ---------- App shell ---------- */
+#app{ position:relative; width:100vw; height:100vh; overflow:hidden; }
 
-    /* Role Reveal Screen */
-    #screen-role-reveal { z-index: 20; background: rgba(255, 255, 255, 0.3); }
-    #role-text { font-size: 3rem; font-weight: bold; opacity: 0; transition: opacity 0.5s; text-shadow: 0 0 10px rgba(255,255,255,0.8); }
+.screen{
+  position:absolute; inset:0;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  opacity:0; pointer-events:none; transform:scale(0.985);
+  transition:opacity .55s var(--ease-out), transform .55s var(--ease-out);
+  background:var(--surface);
+}
+.screen.active{ opacity:1; pointer-events:auto; transform:scale(1); }
+.screen.top-layer{ background:transparent; z-index:40; }
 
-    /* Map Selection Screen */
-    #screen-mapselect { z-index: 10; justify-content: center; align-items: center; }
-    #screen-mapselect h2 { margin-bottom: 25px; font-size: 2rem; }
-    .map-grid { display: grid; grid-template-columns: repeat(2, 420px); grid-template-rows: repeat(2, 240px); gap: 20px; justify-content: center; align-content: center; }
-    .map-card { border: 2px solid #e0e0e0; border-radius: 12px; cursor: pointer; text-align: center; transition: all 0.3s; width: 420px; height: 240px; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; background: #fafafa; position: relative; overflow: hidden; }
-    .map-card:hover { border-color: #3498db; background: #f0f8ff; }
-    .map-card-title { padding: 8px; width: 100%; border-bottom: 1px solid #ddd; background: #fff; z-index: 2; }
-    .map-card h3 { margin: 0 0 2px 0; color: #333; font-size: 1.05rem; }
-    .map-card p { margin: 0; color: #666; font-size: 0.8rem; }
-    .minimap-container { position: relative; width: 800px; height: 450px; transform: scale(0.38); transform-origin: top center; margin-top: 5px; pointer-events: none; }
+/* ---------- Buttons: Squircle / Apple style ---------- */
+.btn{
+  appearance:none; border:none; cursor:pointer;
+  font-family:inherit; font-size:1.02rem; font-weight:600; letter-spacing:.1px;
+  padding:15px 34px;
+  border-radius:var(--radius-squircle);
+  transition: transform .28s var(--ease-spring), box-shadow .28s var(--ease-out), background-color .28s var(--ease-out), filter .28s var(--ease-out);
+  will-change: transform;
+}
+.btn:active{ transform:translateY(1px) scale(.97); }
+.btn-primary{ background:var(--ink); color:#fff; box-shadow:0 1px 2px rgba(0,0,0,.08); }
+.btn-primary:hover{ transform:translateY(-2px) scale(1.035); box-shadow:0 14px 28px rgba(0,0,0,.18); filter:brightness(1.15); }
+.btn-secondary{ background:var(--hairline-soft); color:var(--ink); }
+.btn-secondary:hover{ transform:translateY(-2px) scale(1.035); box-shadow:0 10px 22px rgba(0,0,0,.08); background:#dfdfe4; }
+.btn-ghost{ background:transparent; color:var(--ink-soft); box-shadow:inset 0 0 0 1.4px var(--hairline); }
+.btn-ghost:hover{ color:var(--ink); box-shadow:inset 0 0 0 1.4px var(--ink); transform:translateY(-1px); }
+.btn-row{ display:flex; gap:16px; margin-top:44px; }
 
-    /* Game Screen */
-    #screen-game { z-index: 10; justify-content: flex-start; padding-top: 20px; }
-    .header-bar { width: 100%; max-width: 1000px; display: flex; justify-content: space-between; padding: 10px 20px; margin-bottom: 10px; font-size: 1.1rem; color: #555; }
-    .header-bar span { cursor: pointer; }
-    .header-bar span:hover { color: #000; font-weight: bold; }
-    .status-text { font-size: 1.3rem; font-weight: bold; margin-bottom: 20px; }
-    
-    /* Board */
-    .board-container { border: 1px solid #e0e0e0; border-radius: 12px; position: relative; background: #fafafa; margin-bottom: 20px; width: 800px; height: 450px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-    
-    /* 노드가 선보다 항상 위에 오도록 z-index를 높게 설정 (z-index: 5) */
-    .node { position: absolute; width: 40px; height: 40px; background: #fff; border: 2px solid #b0b0b0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1rem; z-index: 5; color: #666; transform: translate(-50%, -50%); }
-    .node.s-node { background: #34495e; color: #fff; border-color: #34495e; }
-    .node.t-node { border: 4px double #b0b0b0; }
-    
-    /* 간선 및 핵심 경로 (z-index: 1~2로 설정하여 노드 아래에 위치) */
-    .edge-line { position: absolute; background: #d0d0d0; transform-origin: 0 50%; cursor: pointer; z-index: 1; transition: background 0.3s; height: 6px; }
-    .edge-line:hover { background: #999; }
-    .edge-line.selected { background: #3498db; }
-    .edge-line.assigned { background: #2980b9; cursor: default; }
-    .edge-line.critical-path { background: #e74c3c !important; height: 8px; z-index: 2; }
-    
-    /* Edge Weight Label */
-    .edge-label { position: absolute; background: #fff; border: 2px solid #2980b9; color: #2980b9; font-size: 0.95rem; font-weight: bold; border-radius: 6px; padding: 2px 6px; z-index: 4; transform: translate(-50%, -50%); cursor: pointer; display: none; }
-    .edge-label.visible { display: flex; align-items: center; justify-content: center; }
+/* ---------- Intro screen ---------- */
+#screen-intro{ z-index:5; }
+#intro-canvas{ position:absolute; inset:0; width:100%; height:100%; cursor:crosshair; }
+.intro-fore{ position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; pointer-events:none; }
+.intro-fore .btn-row{ pointer-events:auto; }
+.eyebrow{
+  font-size:.78rem; font-weight:600; letter-spacing:3.2px; text-transform:uppercase;
+  color:var(--ink-soft); margin-bottom:18px;
+}
+#screen-intro h1{
+  font-family:"Times New Roman", Times, serif; font-weight:400;
+  font-size:clamp(5rem,11vw,9.5rem); line-height:.98; letter-spacing:1px;
+  color:var(--ink);
+}
+#screen-intro h2{
+  font-family:"Times New Roman", Times, serif; font-weight:400; font-style:italic;
+  font-size:clamp(1.15rem,2vw,1.55rem); color:var(--ink-soft); margin-top:14px; letter-spacing:.3px;
+}
+#screen-intro.fog-active #intro-fore{ filter:blur(0px); }
 
-    /* Number Selector */
-    .number-pad { display: flex; flex-wrap: wrap; max-width: 850px; justify-content: center; gap: 8px; margin-bottom: 15px; }
-    .num-btn { width: 46px; height: 46px; border: 2px solid #d0d0d0; border-radius: 10px; background: #fff; cursor: pointer; font-size: 1.1rem; font-weight: bold; color: #555; transition: all 0.2s; }
-    .num-btn:disabled { background: #f0f0f0; color: #ccc; cursor: not-allowed; border-color: #eee; }
-    .num-btn:not(:disabled):hover { border-color: #3498db; color: #3498db; }
+/* Fog reveal overlay */
+#fog-overlay{
+  position:fixed; inset:0; z-index:60; background:var(--fog);
+  opacity:0; pointer-events:none;
+  transition:opacity .5s var(--ease-out);
+  display:flex; align-items:center; justify-content:center;
+}
+#fog-overlay.active{ opacity:1; }
+#role-text{
+  font-family:"Times New Roman", Times, serif; font-weight:400; text-align:center;
+  font-size:clamp(2.6rem,6vw,4.6rem); line-height:1.12; color:var(--ink);
+  opacity:0; transform:scale(.82);
+  transition:opacity .6s var(--ease-spring), transform .6s var(--ease-spring);
+}
+#role-text.show{ opacity:1; transform:scale(1); }
+#role-text small{ display:block; font-size:.36em; letter-spacing:5px; color:var(--ink-soft); font-family:-apple-system,sans-serif; font-weight:600; margin-bottom:10px; text-transform:uppercase; }
 
-    /* AI Loading */
-    #ai-loading { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.7); z-index: 10; display: none; flex-direction: column; align-items: center; justify-content: center; }
-    .spinner { border: 5px solid rgba(0,0,0,0.1); width: 50px; height: 50px; border-radius: 50%; border-left-color: #333; animation: spin 1s linear infinite; margin-bottom: 15px; }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+/* ---------- Difficulty screen ---------- */
+#screen-difficulty h2, #screen-mapselect h2, #screen-rules h2{
+  font-family:"Times New Roman", Times, serif; font-weight:400; font-size:2.6rem; margin-bottom:8px;
+}
+#screen-difficulty p.sub, #screen-mapselect p.sub{ color:var(--ink-soft); font-size:1rem; margin-bottom:44px; }
+.diff-row{ display:flex; gap:22px; }
+.diff-card{
+  width:220px; padding:32px 24px; border-radius:26px; cursor:pointer;
+  background:var(--surface); box-shadow:inset 0 0 0 1.4px var(--hairline);
+  transition: all .32s var(--ease-spring);
+  text-align:left;
+}
+.diff-card:hover{ transform:translateY(-6px) scale(1.02); box-shadow:inset 0 0 0 1.4px var(--ink), 0 18px 30px rgba(0,0,0,.08); }
+.diff-card.chosen{ background:var(--ink); color:#fff; box-shadow:none; }
+.diff-card h3{ font-size:1.25rem; margin-bottom:8px; }
+.diff-card p{ font-size:.86rem; color:var(--ink-soft); line-height:1.5; }
+.diff-card.chosen p{ color:#c9c9cc; }
+
+/* ---------- Rules: Glass card ---------- */
+#screen-rules{ z-index:70; background:rgba(255,255,255,.35); backdrop-filter:blur(24px) saturate(160%); -webkit-backdrop-filter:blur(24px) saturate(160%); }
+.glass-card{
+  width:min(720px,88vw); max-height:82vh; overflow-y:auto;
+  background:rgba(255,255,255,.72);
+  border-radius:30px;
+  box-shadow:0 30px 70px rgba(0,0,0,.18), inset 0 0 0 1px rgba(255,255,255,.6);
+  backdrop-filter:blur(30px) saturate(180%); -webkit-backdrop-filter:blur(30px) saturate(180%);
+  padding:44px 46px;
+  transform:translateY(40px); opacity:0;
+  transition:transform .5s var(--ease-spring), opacity .5s var(--ease-out);
+}
+#screen-rules.active .glass-card{ transform:translateY(0); opacity:1; }
+.glass-card h3{ font-size:1.08rem; margin:22px 0 8px; font-weight:700; }
+.glass-card p, .glass-card li{ font-size:.98rem; line-height:1.65; color:#3a3a3c; }
+.glass-card ul{ margin-left:20px; margin-top:6px; }
+.glass-card .example-box{ margin-top:10px; padding:14px 16px; border-radius:14px; background:rgba(0,0,0,.04); font-size:.88rem; color:var(--ink-soft); }
+.glass-card .rules-footer{ margin-top:30px; display:flex; justify-content:flex-end; gap:12px; }
+.glass-card .cite{ margin-top:22px; font-size:.76rem; color:#a1a1a6; }
+
+/* ---------- Map selection: stacked card deck ---------- */
+#screen-mapselect{ z-index:10; }
+.deck{
+  position:relative; width:460px; height:300px;
+  perspective:1400px;
+}
+.map-card{
+  position:absolute; left:0; top:0; width:460px; height:300px;
+  background:#fff; border-radius:24px; cursor:pointer; overflow:hidden;
+  box-shadow:0 2px 10px rgba(0,0,0,.08), inset 0 0 0 1px var(--hairline-soft);
+  transition: transform .5s var(--ease-spring), box-shadow .4s var(--ease-out), opacity .4s var(--ease-out);
+  transform-origin:center bottom;
+}
+.map-card .card-head{ padding:16px 20px 10px; }
+.map-card h3{ font-size:1.02rem; font-weight:700; }
+.map-card p{ font-size:.78rem; color:var(--ink-soft); margin-top:2px; }
+.map-card .card-thumb{ position:relative; width:100%; height:210px; }
+.map-card:hover{ box-shadow:0 26px 46px rgba(0,0,0,.16), inset 0 0 0 1px var(--hairline-soft); }
+.map-card.flying{ transition: transform .85s var(--ease-spring), opacity .6s var(--ease-out); z-index:99; }
+.deck-hint{ margin-top:26px; font-size:.86rem; color:var(--ink-soft); text-align:center; }
+.deck-index{ display:flex; gap:8px; margin-top:20px; }
+.dot{ width:7px; height:7px; border-radius:50%; background:var(--hairline); transition:background .25s; }
+.dot.active{ background:var(--ink); }
+
+/* ---------- Game screen ---------- */
+#screen-game{ z-index:10; justify-content:flex-start; padding-top:34px; }
+.game-topbar{
+  width:100%; max-width:960px; display:flex; justify-content:space-between; align-items:center;
+  padding:0 8px; margin-bottom:22px;
+}
+.game-topbar .link{ font-size:.92rem; color:var(--ink-soft); cursor:pointer; transition:color .2s; font-weight:500; }
+.game-topbar .link:hover{ color:var(--ink); }
+.turn-badge{
+  display:flex; align-items:center; gap:10px; font-size:1rem; font-weight:600;
+}
+.turn-dot{ width:9px; height:9px; border-radius:50%; background:var(--blue); box-shadow:0 0 0 5px rgba(0,113,227,.12); transition:background .25s, box-shadow .25s; }
+.turn-dot.wait{ background:var(--ink-soft); box-shadow:0 0 0 5px rgba(110,110,115,.1); }
+
+.status-text{ font-size:1.5rem; font-weight:600; margin-bottom:26px; letter-spacing:.1px; }
+.status-text .role-tag{ color:var(--ink-soft); font-weight:400; }
+
+.board-container{
+  position:relative; width:900px; height:460px; background:var(--surface);
+  margin-bottom:26px;
+}
+.node{
+  position:absolute; width:44px; height:44px; border-radius:50%;
+  background:#fff; border:1.6px solid #c7c7cc; color:#6e6e73;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:.92rem; z-index:5; transform:translate(-50%,-50%);
+  transition: transform .28s var(--ease-spring), border-color .25s, box-shadow .25s;
+}
+.node:hover{ transform:translate(-50%,-50%) scale(1.14); border-color:var(--ink); }
+.node.s-node{ background:var(--ink); color:#fff; border-color:var(--ink); }
+.node.t-node{ box-shadow:0 0 0 4px var(--hairline-soft); border-color:var(--ink); color:var(--ink); font-weight:800; }
+
+.edge-hit{
+  position:absolute; height:22px; transform-origin:0 50%; cursor:pointer; z-index:3;
+  background:transparent;
+}
+.edge-line{
+  position:absolute; top:9px; left:0; height:4px; width:100%; border-radius:3px;
+  background:var(--hairline); transition: background-color .25s, height .2s, box-shadow .3s;
+}
+.edge-hit:hover .edge-line{ background:#adadb2; height:5px; }
+.edge-hit.selected .edge-line{ background:var(--blue); height:5px; box-shadow:0 0 0 4px rgba(0,113,227,.12); }
+.edge-hit.assigned .edge-line{ background:var(--graphite); cursor:default; }
+.edge-hit.assigned{ cursor:default; }
+.edge-hit.uf-touch .edge-line{ background:var(--hairline); }
+.edge-hit.uf-green .edge-line{ background:var(--green); }
+.edge-hit.critical-path .edge-line{
+  background:var(--orange); height:6px; z-index:4;
+  animation: glow-pulse 1.6s ease-in-out infinite;
+}
+@keyframes glow-pulse{
+  0%,100%{ box-shadow:0 0 6px 0 rgba(255,159,10,.5); }
+  50%{ box-shadow:0 0 18px 4px rgba(255,159,10,.75); }
+}
+
+.edge-label{
+  position:absolute; min-width:30px; height:26px; padding:0 3px; border-radius:8px;
+  background:#fff; box-shadow:inset 0 0 0 1.6px var(--blue); color:var(--blue);
+  font-size:.86rem; font-weight:700; display:none; align-items:center; justify-content:center;
+  z-index:6; transform:translate(-50%,-50%); cursor:pointer; transition:transform .2s var(--ease-spring), box-shadow .2s;
+}
+.edge-label.visible{ display:flex; }
+.edge-label.assigned-label{ box-shadow:inset 0 0 0 1.6px var(--graphite); color:var(--graphite); }
+.edge-label.uf-green-label{ box-shadow:inset 0 0 0 1.6px var(--green); color:var(--green); }
+.edge-label.critical-label{ box-shadow:inset 0 0 0 1.8px var(--orange); color:var(--orange); }
+
+.uf-toast{
+  position:absolute; top:14px; left:50%; transform:translate(-50%,-14px); opacity:0;
+  background:var(--ink); color:#fff; font-size:.86rem; font-weight:600; letter-spacing:.2px;
+  padding:9px 18px; border-radius:999px; z-index:20; transition:opacity .3s var(--ease-out), transform .3s var(--ease-out);
+  pointer-events:none;
+}
+.uf-toast.show{ opacity:1; transform:translate(-50%,0); }
+
+/* Number pad */
+.number-pad{ display:flex; flex-wrap:wrap; max-width:900px; justify-content:center; gap:10px; margin-bottom:16px; }
+.num-btn{
+  width:48px; height:48px; border-radius:16px; border:none; cursor:pointer;
+  background:var(--hairline-soft); color:var(--ink); font-size:1.02rem; font-weight:700;
+  transition: transform .22s var(--ease-spring), background-color .2s, color .2s, box-shadow .2s;
+}
+.num-btn:hover:not(:disabled){ background:var(--ink); color:#fff; transform:translateY(-3px) scale(1.06); box-shadow:0 10px 18px rgba(0,0,0,.16); }
+.num-btn:disabled{ background:#f5f5f7; color:#d2d2d7; cursor:not-allowed; }
+.hint-text{ color:var(--ink-soft); font-size:.92rem; margin-top:6px; }
+
+/* AI loading */
+#ai-loading{
+  position:absolute; inset:0; background:rgba(255,255,255,.72); backdrop-filter:blur(6px);
+  z-index:30; display:none; flex-direction:column; align-items:center; justify-content:center;
+  opacity:0; transition:opacity .3s var(--ease-out); border-radius:20px;
+}
+#ai-loading.show{ display:flex; opacity:1; }
+.think-dots{ display:flex; gap:8px; margin-bottom:16px; }
+.think-dots span{ width:9px; height:9px; border-radius:50%; background:var(--ink); animation:think 1.1s ease-in-out infinite; }
+.think-dots span:nth-child(2){ animation-delay:.15s; }
+.think-dots span:nth-child(3){ animation-delay:.3s; }
+@keyframes think{ 0%,60%,100%{ transform:translateY(0); opacity:.35; } 30%{ transform:translateY(-8px); opacity:1; } }
+#ai-loading h3{ font-size:1.02rem; font-weight:600; color:var(--ink-soft); }
+
+/* ---------- Union-Find calculation overlay ---------- */
+#screen-uf{ z-index:50; }
+.uf-panel{ text-align:center; }
+.uf-panel h2{ font-family:"Times New Roman", Times, serif; font-weight:400; font-size:2.2rem; margin-bottom:6px; }
+.uf-panel p{ color:var(--ink-soft); font-size:.96rem; }
+
+/* ---------- Victory screen ---------- */
+#screen-victory{ z-index:80; background:rgba(255,255,255,.001); }
+#victory-canvas{ position:absolute; inset:0; z-index:1; pointer-events:none; }
+#victory-blur{
+  position:absolute; inset:0; z-index:0; backdrop-filter:blur(30px) saturate(140%); -webkit-backdrop-filter:blur(30px) saturate(140%);
+  background:rgba(255,255,255,.5);
+}
+.victory-panel{
+  position:relative; z-index:2; text-align:center;
+  transform:scale(.7); opacity:0; transition:transform .6s var(--ease-spring), opacity .5s var(--ease-out);
+}
+#screen-victory.active .victory-panel{ transform:scale(1); opacity:1; }
+.victory-eyebrow{ font-size:.8rem; font-weight:700; letter-spacing:4px; color:var(--ink-soft); text-transform:uppercase; margin-bottom:14px; }
+.victory-title{ font-family:"Times New Roman", Times, serif; font-weight:400; font-size:clamp(3.4rem,8vw,6.4rem); letter-spacing:1px; }
+.victory-sub{ margin-top:18px; font-size:1.2rem; color:var(--ink-soft); }
+.victory-sub b{ color:var(--ink); font-weight:700; }
+.victory-result{ margin-top:6px; font-size:1.45rem; font-weight:700; }
+
+/* Scrollbar polish */
+::-webkit-scrollbar{ width:8px; }
+::-webkit-scrollbar-thumb{ background:var(--hairline); border-radius:8px; }
 </style>
 </head>
 <body>
 
 <div id="mobile-block">
-    <h1>Oops!</h1>
-    <p>It's a PC-Only site. Please visit this site on PC.</p>
+  <h1>Graphing</h1>
+  <p>This is a PC-only experience. Please open Graphing on a desktop browser to play.</p>
 </div>
 
 <div id="app">
-    <!-- Intro Screen -->
-    <div id="screen-intro" class="screen active">
-        <div class="title-group">
-            <h1>Graphing</h1>
-            <h2>An Graph-Algorithm game</h2>
-        </div>
-        <div>
-            <button class="btn btn-black" onclick="startRoleReveal()">Start</button>
-            <button class="btn btn-gray" onclick="showRules()">Show me the rules</button>
-        </div>
-    </div>
 
-    <!-- Rules Screen -->
-    <div id="screen-rules" class="screen">
-        <div class="rules-content">
-            <h2>게임 규칙 (간선 게임)</h2>
-            <p><strong>개요:</strong> 2x3 직사각형 격자 형태의 노드와 간선으로 이루어진 그래프에서 진행되는 턴제 알고리즘 게임입니다.</p>
-            <ul>
-                <li><strong>시작점(S)과 목표점(T):</strong> 공격자와 수비자는 S에서 T로 가는 경로를 완성해야 합니다.</li>
-                <li><strong>행동:</strong> 자신의 턴에 '배정되지 않은 간선' 하나와 '사용되지 않은 숫자' 하나를 골라 간선에 배정합니다.</li>
-                <li><strong>경로의 난이도:</strong> S에서 T로 가는 특정 경로에 배정된 숫자 중 '가장 큰 값'이 해당 경로의 난이도입니다.</li>
-                <li><strong>그래프의 난이도(C) 책정 기준:</strong> S에서 T로 연결되는 모든 가능한 경로들을 조사할 때, <strong>각 경로마다 포함된 간선 중 가장 큰 숫자를 구하고, 그 최댓값들 중에서 가장 작은 값(최솟값)</strong>이 최종 그래프의 난이도 C가 됩니다. (미배정 간선은 가중치 0으로 처리하여 계산)</li>
-            </ul>
-            <p><strong>승리 조건:</strong> 공격자는 C를 최대화하는 것이 목표이며, 수비자는 C를 최소화하는 것이 목표입니다.<br>(기준점 C=6: C가 7 이상이면 공격자 승, 5 이하면 수비자 승, 6면 무승부)</p>
-            <p style="font-size: 0.85rem; color: #888; margin-top: 15px;">KOI 2026 1차대회 중등부 20번 문제(간선 게임)를 응용하여 제작되었습니다.</p>
-            <div style="text-align: center; margin-top: 25px;">
-                <button class="btn btn-black" onclick="closeRules()">닫기</button>
-            </div>
-        </div>
+  <!-- ============ INTRO ============ -->
+  <div id="screen-intro" class="screen active">
+    <canvas id="intro-canvas"></canvas>
+    <div class="intro-fore">
+      <div class="eyebrow">A Graph Algorithm Game</div>
+      <h1>Graphing</h1>
+      <h2>Attacker. Defender. One bottleneck.</h2>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-start">Start</button>
+        <button class="btn btn-ghost" id="btn-rules">Show me the rules</button>
+      </div>
     </div>
+  </div>
 
-    <!-- Role Reveal Screen -->
-    <div id="screen-role-reveal" class="screen">
-        <div id="role-text"></div>
+  <!-- ============ DIFFICULTY ============ -->
+  <div id="screen-difficulty" class="screen">
+    <h2>Choose Opponent Difficulty</h2>
+    <p class="sub">Your opponent is played by an on-device minimax AI.</p>
+    <div class="diff-row" id="diff-row">
+      <div class="diff-card" data-diff="easy">
+        <h3>Easy</h3>
+        <p>Shallow search, frequent random choices. Great for learning the rules.</p>
+      </div>
+      <div class="diff-card" data-diff="normal">
+        <h3>Normal</h3>
+        <p>Minimax with alpha‑beta pruning at moderate depth. A fair fight.</p>
+      </div>
+      <div class="diff-card" data-diff="hard">
+        <h3>Hard</h3>
+        <p>Deeper search, wider candidate set. Punishes every loose edge.</p>
+      </div>
     </div>
-
-    <!-- Map Selection Screen -->
-    <div id="screen-mapselect" class="screen">
-        <h2>플레이할 맵을 선택하십시오</h2>
-        <div class="map-grid" id="map-grid"></div>
+    <div class="btn-row" style="margin-top:52px;">
+      <button class="btn btn-primary" id="btn-diff-continue" disabled>Continue</button>
     </div>
+  </div>
 
-    <!-- Game Screen -->
-    <div id="screen-game" class="screen">
-        <div class="header-bar">
-            <span onclick="location.reload()">Home</span>
-            <span onclick="showRules()">Show me the rules</span>
-        </div>
-        
-        <div class="status-text" id="turn-status"></div>
-        
-        <div class="board-container" id="board">
-            <div id="ai-loading">
-                <div class="spinner"></div>
-                <h3 style="color:#333;">AI's Turn. Working...</h3>
-            </div>
-        </div>
+  <!-- ============ RULES (Glass Card) ============ -->
+  <div id="screen-rules" class="screen">
+    <div class="glass-card">
+      <h2>How Graphing Works</h2>
+      <h3>Overview</h3>
+      <p>Two players — an <b>Attacker</b> and a <b>Defender</b> — take turns writing weights onto the edges of a rectangular graph that connects a start node <b>S</b> to a target node <b>T</b>.</p>
 
-        <div class="number-pad" id="numpad"></div>
-        <p style="color: #666; margin-top: 10px; font-size: 1rem;">간선을 선택한 후 숫자를 배정하십시오.</p>
+      <h3>A Turn</h3>
+      <ul>
+        <li>Pick one unassigned edge on the board.</li>
+        <li>Pick one unused number and assign it to that edge.</li>
+        <li>Turns alternate until every edge has a number.</li>
+      </ul>
+
+      <h3>Path Difficulty</h3>
+      <p>For any path from S to T, its difficulty is the <b>largest</b> weight found along that path — the path is only as easy as its hardest edge.</p>
+
+      <h3>Bottleneck &amp; Final Difficulty (C)</h3>
+      <p>Look at every possible path from S to T. Each path has its own largest-edge value. The graph's final difficulty <b>C</b> is the <b>smallest</b> of those largest values — the easiest route available, at its hardest point.</p>
+      <div class="example-box">Example: if the easiest available route still forces you through an edge weighted 7, then C = 7, even if a harder-looking route exists elsewhere.</div>
+
+      <h3>Winning</h3>
+      <p>The Attacker wants to <b>maximize C</b>; the Defender wants to <b>minimize C</b>. Once all edges are assigned, C is computed and compared to the map's threshold — above it, Attacker wins; below it, Defender wins; exactly on it is a draw.</p>
+
+      <h3>Why Rectangular Maps?</h3>
+      <p>Every map is built as an expanded rectangular grid so no single edge can decide the game by itself — bottlenecks emerge from real strategic tension, not from a lone chokepoint.</p>
+
+      <p class="cite">Inspired by a bottleneck-path problem from a national informatics olympiad; adapted and redesigned for Graphing.</p>
+      <div class="rules-footer">
+        <button class="btn btn-primary" id="btn-close-rules">Got it</button>
+      </div>
     </div>
+  </div>
+
+  <!-- ============ MAP SELECT ============ -->
+  <div id="screen-mapselect" class="screen">
+    <h2>Choose Your Map</h2>
+    <p class="sub">Hover the deck to browse. Click a map to deploy it to the board.</p>
+    <div class="deck" id="deck"></div>
+    <div class="deck-index" id="deck-index"></div>
+    <p class="deck-hint">Every map is a rectangular expanded graph — no single edge decides the game.</p>
+  </div>
+
+  <!-- ============ GAME ============ -->
+  <div id="screen-game" class="screen">
+    <div class="game-topbar">
+      <span class="link" id="btn-home">Home</span>
+      <div class="turn-badge"><span class="turn-dot" id="turn-dot"></span><span id="turn-badge-text">Your Turn</span></div>
+      <span class="link" id="btn-show-rules">Rules</span>
+    </div>
+    <div class="status-text" id="turn-status"></div>
+    <div class="board-container" id="board">
+      <div id="ai-loading">
+        <div class="think-dots"><span></span><span></span><span></span></div>
+        <h3>AI is thinking…</h3>
+      </div>
+      <div class="uf-toast" id="uf-toast"></div>
+    </div>
+    <div class="number-pad" id="numpad"></div>
+    <p class="hint-text">Select an edge, then assign it a number.</p>
+  </div>
+
+  <!-- ============ UNION-FIND CALC OVERLAY ============ -->
+  <div id="screen-uf" class="screen">
+    <div class="uf-panel">
+      <h2 id="uf-title">Computing the Bottleneck</h2>
+      <p id="uf-sub">Merging components in ascending weight order…</p>
+    </div>
+  </div>
+
+  <!-- ============ VICTORY ============ -->
+  <div id="screen-victory" class="screen">
+    <div id="victory-blur"></div>
+    <canvas id="victory-canvas"></canvas>
+    <div class="victory-panel">
+      <div class="victory-eyebrow" id="victory-map-label">Map 1</div>
+      <div class="victory-title">Victory</div>
+      <div class="victory-sub">Final Difficulty <b id="victory-c">C = 0</b></div>
+      <div class="victory-result" id="victory-result">Attacker Wins</div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-play-again">Play Again</button>
+        <button class="btn btn-secondary" id="btn-victory-home">Home</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="fog-overlay">
+  <div id="role-text"></div>
 </div>
 
 <script>
-    class UnionFind {
-        constructor(size) {
-            this.parent = Array.from({length: size}, (_, i) => i);
+'use strict';
+/* ================================================================
+   GRAPHING — engine
+   Architecture:
+     UnionFind      — disjoint set (kept from original logic)
+     MapManager     — map definitions + card deck rendering
+     IntroLiving    — canvas "living graph" idle animation
+     Confetti       — victory canvas particle burst
+     BoardRenderer  — draws the live game board (DOM based, like original)
+     GraphAI        — depth-limited minimax with alpha-beta pruning
+     Game           — state machine tying it all together
+     UIManager      — screen transitions, modals, role reveal
+   ================================================================ */
+
+/* ---------------- Union-Find (unchanged logic) ---------------- */
+class UnionFind{
+  constructor(size){ this.parent = Array.from({length:size}, (_,i)=>i); }
+  find(i){ if(this.parent[i]===i) return i; return this.parent[i]=this.find(this.parent[i]); }
+  union(i,j){ const a=this.find(i), b=this.find(j); if(a!==b) this.parent[a]=b; }
+}
+
+/* ---------------- small utils ---------------- */
+const sleep = ms => new Promise(res=>setTimeout(res, ms));
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+
+/* ================================================================
+   MapManager — 8 rectangular expanded-grid maps.
+   Every map is built so S and T each touch >= 2 edges, and every
+   internal cut between S and T is spanned by >= 2 edges, so no
+   single edge can unilaterally decide the outcome.
+   Coordinates live inside a 900x460 board.
+   ================================================================ */
+class MapManager{
+  static maps = MapManager.buildMaps();
+
+  static buildMaps(){
+    const maps = [];
+
+    // Helper: build a rows x cols grid of nodes with full horizontal +
+    // vertical edges, plus a custom list of extra diagonal edges.
+    function grid(rows, cols, extraDiagonals, w=900, h=460, padX=90, padY=90){
+      const nodes = [];
+      const idx = (r,c) => r*cols + c;
+      const stepX = cols>1 ? (w - padX*2)/(cols-1) : 0;
+      const stepY = rows>1 ? (h - padY*2)/(rows-1) : 0;
+      for(let r=0;r<rows;r++){
+        for(let c=0;c<cols;c++){
+          nodes.push({ x: padX + c*stepX, y: padY + r*stepY, l:'', isS:false, isT:false });
         }
-        find(i) {
-            if (this.parent[i] === i) return i;
-            return this.parent[i] = this.find(this.parent[i]);
-        }
-        union(i, j) {
-            const rootI = this.find(i);
-            const rootJ = this.find(j);
-            if (rootI !== rootJ) this.parent[rootI] = rootJ;
-        }
+      }
+      nodes[0].isS = true; nodes[0].l = 'S';
+      nodes[rows*cols-1].isT = true; nodes[rows*cols-1].l = 'T';
+
+      const edges = [];
+      const seen = new Set();
+      const addEdge = (u,v) => {
+        const key = u<v ? `${u}-${v}` : `${v}-${u}`;
+        if(seen.has(key)) return;
+        seen.add(key);
+        edges.push([u,v]);
+      };
+      // horizontal
+      for(let r=0;r<rows;r++) for(let c=0;c<cols-1;c++) addEdge(idx(r,c), idx(r,c+1));
+      // vertical
+      for(let r=0;r<rows-1;r++) for(let c=0;c<cols;c++) addEdge(idx(r,c), idx(r+1,c));
+      // extra diagonals: list of [r,c,dir] where dir 'dr' (down-right) or 'dl' (down-left)
+      extraDiagonals.forEach(([r,c,dir])=>{
+        if(dir==='dr' && r+1<rows && c+1<cols) addEdge(idx(r,c), idx(r+1,c+1));
+        if(dir==='dl' && r+1<rows && c-1>=0) addEdge(idx(r,c), idx(r+1,c-1));
+      });
+      return { nodes, edges };
     }
 
-    let isAttacker = true;
-    let selectedEdgeId = null;
-    let selectedMapIdx = 0;
-    const TOTAL_EDGES = 11; 
-    let edges = []; 
-    let usedNumbers = new Set();
-    
-    const screenIntro = document.getElementById('screen-intro');
-    const screenRules = document.getElementById('screen-rules');
-    const screenRoleReveal = document.getElementById('screen-role-reveal');
-    const screenMapSelect = document.getElementById('screen-mapselect');
-    const screenGame = document.getElementById('screen-game');
-    
-    const board = document.getElementById('board');
-    const numpad = document.getElementById('numpad');
-    const turnStatus = document.getElementById('turn-status');
-    const roleText = document.getElementById('role-text');
-
-    const mapsData = [
-        { 
-            title: "Map 1 (정통 직사각형 격자)", desc: "기본적인 2x3 직사각형 구조",
-            nodes: [ {x:150,y:120,l:'S',isS:true}, {x:400,y:120,l:''}, {x:650,y:120,l:''}, {x:150,y:330,l:''}, {x:400,y:330,l:''}, {x:650,y:330,l:'T',isT:true} ],
-            edges: [ [0,1], [1,2], [3,4], [4,5], [0,3], [1,4], [2,5], [0,4], [1,5], [3,1], [4,2] ]
-        },
-        { 
-            title: "Map 2 (크로스 직사각형 격자)", desc: "대각선 교차가 강화된 직사각형",
-            nodes: [ {x:150,y:120,l:'S',isS:true}, {x:400,y:120,l:''}, {x:650,y:120,l:''}, {x:150,y:330,l:''}, {x:400,y:330,l:''}, {x:650,y:330,l:'T',isT:true} ],
-            edges: [ [0,1], [1,2], [3,4], [4,5], [0,3], [1,4], [2,5], [0,5], [3,2], [0,4], [1,5] ]
-        },
-        { 
-            title: "Map 3 (대칭형 직사각형 격자)", desc: "균형 잡힌 복합 경로 직사각형",
-            nodes: [ {x:150,y:120,l:'S',isS:true}, {x:400,y:120,l:''}, {x:650,y:120,l:''}, {x:150,y:330,l:''}, {x:400,y:330,l:''}, {x:650,y:330,l:'T',isT:true} ],
-            edges: [ [0,1], [1,2], [3,4], [4,5], [0,3], [1,4], [2,5], [3,1], [4,2], [0,4], [3,5] ]
-        },
-        { 
-            title: "Map 4 (다중 우회 직사각형 격자)", desc: "우회와 선택지가 많은 직사각형",
-            nodes: [ {x:150,y:120,l:'S',isS:true}, {x:400,y:120,l:''}, {x:650,y:120,l:''}, {x:150,y:330,l:''}, {x:400,y:330,l:''}, {x:650,y:330,l:'T',isT:true} ],
-            edges: [ [0,1], [1,2], [3,4], [4,5], [0,3], [1,4], [2,5], [0,5], [3,1], [4,2], [1,5] ]
-        }
+    const defs = [
+      { title:'Map 1 — Straight Grid',    desc:'2×4 rectangular grid, diagonals lean right',
+        build:()=>grid(2,4,[[0,0,'dr'],[0,1,'dr'],[0,2,'dr']]) },
+      { title:'Map 2 — Mirrored Grid',    desc:'2×4 rectangular grid, diagonals lean left',
+        build:()=>grid(2,4,[[0,1,'dl'],[0,2,'dl'],[0,3,'dl']]) },
+      { title:'Map 3 — Deep Field',       desc:'3×3 rectangular grid, central cross-braces',
+        build:()=>grid(3,3,[[0,0,'dr'],[1,1,'dr'],[0,1,'dl'],[1,2,'dl']]) },
+      { title:'Map 4 — Twin Diagonals',   desc:'3×3 rectangular grid, corner-to-corner braces',
+        build:()=>grid(3,3,[[0,1,'dr'],[1,0,'dr'],[0,1,'dl'],[1,2,'dl']]) },
+      { title:'Map 5 — Wide Corridor',    desc:'2×5 rectangular grid, forward-leaning shortcuts',
+        build:()=>grid(2,5,[[0,0,'dr'],[0,1,'dr'],[0,2,'dr'],[0,3,'dr']]) },
+      { title:'Map 6 — Reverse Corridor', desc:'2×5 rectangular grid, backward-leaning shortcuts',
+        build:()=>grid(2,5,[[0,1,'dl'],[0,2,'dl'],[0,3,'dl'],[0,4,'dl']]) },
+      { title:'Map 7 — Tall Lattice',     desc:'4×3 rectangular grid, alternating braces',
+        build:()=>grid(4,3,[[0,0,'dr'],[1,1,'dr'],[2,0,'dr'],[1,1,'dl']]) },
+      { title:'Map 8 — Fortress',         desc:'3×4 rectangular grid, dense central bracing',
+        build:()=>grid(3,4,[[0,0,'dr'],[0,1,'dr'],[1,1,'dr'],[0,2,'dl'],[1,2,'dl']]) },
     ];
 
-    function showScreen(element) {
-        document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
-        element.classList.add('active');
-    }
+    defs.forEach((d,i)=>{
+      const { nodes, edges } = d.build();
+      maps.push({ id:i, title:d.title, desc:d.desc, nodes, edges });
+    });
+    return maps;
+  }
 
-    function showRules() {
-        screenRules.classList.add('active');
-    }
+  static get(idx){ return MapManager.maps[idx]; }
+  static count(){ return MapManager.maps.length; }
+}
 
-    function closeRules() {
-        screenRules.classList.remove('active');
-    }
+/* ================================================================
+   IntroLiving — canvas "living graph" behind the title.
+   Nodes breathe/float slowly, repel from the cursor with a spring
+   return, and clicking sends a ripple wave through the graph.
+   ================================================================ */
+class IntroLiving{
+  constructor(canvas){
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.mouse = { x:-9999, y:-9999, active:false };
+    this.ripples = [];
+    this.t = 0;
+    this.resize();
+    this.buildGraph();
+    window.addEventListener('resize', ()=>{ this.resize(); this.buildGraph(); });
+    canvas.addEventListener('mousemove', e=>{
+      const r = canvas.getBoundingClientRect();
+      this.mouse.x = e.clientX - r.left; this.mouse.y = e.clientY - r.top; this.mouse.active = true;
+    });
+    canvas.addEventListener('mouseleave', ()=>{ this.mouse.active = false; });
+    canvas.addEventListener('click', e=>{
+      const r = canvas.getBoundingClientRect();
+      this.ripples.push({ x:e.clientX-r.left, y:e.clientY-r.top, radius:0, alpha:.55 });
+    });
+    this.running = true;
+    requestAnimationFrame(this.loop.bind(this));
+  }
 
-    function startRoleReveal() {
-        screenIntro.classList.add('blur-active');
-        
-        setTimeout(() => {
-            screenRoleReveal.classList.add('active');
-            isAttacker = Math.random() > 0.5;
-            roleText.innerText = isAttacker ? '당신은 공격자 입니다.' : '당신은 수비자 입니다.';
-            
-            setTimeout(() => {
-                roleText.style.opacity = 1;
-                
-                setTimeout(() => {
-                    roleText.style.opacity = 0;
-                    screenIntro.classList.remove('blur-active');
-                    
-                    setTimeout(() => {
-                        if(isAttacker) {
-                            renderMapSelection();
-                            showScreen(screenMapSelect);
-                        } else {
-                            selectedMapIdx = Math.floor(Math.random() * 4);
-                            initGame();
-                        }
-                    }, 500);
-                }, 2000);
-            }, 100);
-        }, 500);
-    }
+  resize(){
+    const dpr = Math.min(window.devicePixelRatio||1, 2);
+    this.canvas.width = window.innerWidth * dpr;
+    this.canvas.height = window.innerHeight * dpr;
+    this.canvas.style.width = window.innerWidth+'px';
+    this.canvas.style.height = window.innerHeight+'px';
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+    this.w = window.innerWidth; this.h = window.innerHeight;
+  }
 
-    function renderMapSelection() {
-        const grid = document.getElementById('map-grid');
-        grid.innerHTML = '';
-        
-        mapsData.forEach((map, idx) => {
-            const card = document.createElement('div');
-            card.className = 'map-card';
-            card.onclick = () => {
-                selectedMapIdx = idx;
-                initGame();
-            };
-            
-            const titleBox = document.createElement('div');
-            titleBox.className = 'map-card-title';
-            titleBox.innerHTML = `<h3>${map.title}</h3><p>${map.desc}</p>`;
-            
-            const minimap = document.createElement('div');
-            minimap.className = 'minimap-container';
-            drawGraph(minimap, map, true);
-            
-            card.appendChild(titleBox);
-            card.appendChild(minimap);
-            grid.appendChild(card);
+  // Build a loose, irregular graph scattered across the canvas
+  buildGraph(){
+    const cols = 6, rows = 4;
+    const marginX = this.w*0.08, marginY = this.h*0.18;
+    const stepX = (this.w - marginX*2)/(cols-1);
+    const stepY = (this.h - marginY*2)/(rows-1);
+    this.nodes = [];
+    for(let r=0;r<rows;r++){
+      for(let c=0;c<cols;c++){
+        if(Math.random() < 0.28) continue; // sparsify for an organic feel
+        const bx = marginX + c*stepX + (Math.random()-0.5)*stepX*0.4;
+        const by = marginY + r*stepY + (Math.random()-0.5)*stepY*0.4;
+        this.nodes.push({
+          bx, by, x:bx, y:by,
+          phase: Math.random()*Math.PI*2,
+          speed: 0.35 + Math.random()*0.4,
+          amp: 8 + Math.random()*10,
+          vx:0, vy:0
         });
+      }
     }
-
-    function drawGraph(container, mapDef, isPreview = false) {
-        mapDef.edges.forEach((e, idx) => {
-            const u = mapDef.nodes[e[0]], v = mapDef.nodes[e[1]];
-            const length = Math.hypot(v.x - u.x, v.y - u.y);
-            const angle = Math.atan2(v.y - u.y, v.x - u.x) * 180 / Math.PI;
-            const midX = (u.x + v.x) / 2;
-            const midY = (u.y + v.y) / 2;
-            
-            const lineDiv = document.createElement('div');
-            lineDiv.className = 'edge-line';
-            lineDiv.style.width = `${length}px`;
-            lineDiv.style.left = `${u.x}px`;
-            lineDiv.style.top = `${u.y - 3}px`;
-            lineDiv.style.transform = `rotate(${angle}deg)`;
-            
-            container.appendChild(lineDiv);
-
-            if (!isPreview) {
-                lineDiv.onclick = () => selectEdge(idx);
-                
-                const labelDiv = document.createElement('div');
-                labelDiv.className = 'edge-label';
-                labelDiv.style.left = `${midX}px`;
-                labelDiv.style.top = `${midY}px`;
-                labelDiv.onclick = () => selectEdge(idx);
-                
-                container.appendChild(labelDiv);
-                edges.push({ id: idx, u: e[0], v: e[1], weight: null, lineEl: lineDiv, labelEl: labelDiv });
-            }
-        });
-
-        mapDef.nodes.forEach(n => {
-            const div = document.createElement('div');
-            div.className = `node ${n.isS ? 's-node' : ''} ${n.isT ? 't-node' : ''}`;
-            div.style.left = `${n.x}px`;
-            div.style.top = `${n.y}px`;
-            div.innerText = n.l;
-            container.appendChild(div);
-        });
+    this.edges = [];
+    for(let i=0;i<this.nodes.length;i++){
+      for(let j=i+1;j<this.nodes.length;j++){
+        const dx=this.nodes[i].bx-this.nodes[j].bx, dy=this.nodes[i].by-this.nodes[j].by;
+        const d = Math.hypot(dx,dy);
+        if(d < Math.min(this.w,this.h)*0.24 && Math.random()<0.55) this.edges.push([i,j]);
+      }
     }
+  }
 
-    function initGame() {
-        showScreen(screenGame);
-        turnStatus.innerText = `Map ${selectedMapIdx + 1} - 당신은 ${isAttacker ? '공격자' : '수비자'} 입니다.`;
-        edges = [];
-        usedNumbers.clear();
-        board.innerHTML = '<div id="ai-loading"><div class="spinner"></div><h3 style="color:#333;">AI\'s Turn. Working...</h3></div>';
-        numpad.innerHTML = '';
-        selectedEdgeId = null;
+  loop(){
+    if(!this.running) return;
+    this.t += 0.016;
+    this.update();
+    this.draw();
+    requestAnimationFrame(this.loop.bind(this));
+  }
 
-        drawGraph(board, mapsData[selectedMapIdx], false);
+  update(){
+    const { mouse, nodes } = this;
+    nodes.forEach(n=>{
+      // breathing / floating base motion
+      const floatX = Math.sin(this.t*n.speed + n.phase) * n.amp;
+      const floatY = Math.cos(this.t*n.speed*0.8 + n.phase) * n.amp;
+      let targetX = n.bx + floatX;
+      let targetY = n.by + floatY;
 
-        for(let i = 1; i <= TOTAL_EDGES; i++) {
-            const btn = document.createElement('button');
-            btn.className = 'num-btn';
-            btn.innerText = i;
-            btn.onclick = () => assignNumber(i);
-            btn.id = `num-${i}`;
-            numpad.appendChild(btn);
+      // mouse repulsion
+      if(mouse.active){
+        const dx = targetX - mouse.x, dy = targetY - mouse.y;
+        const dist = Math.hypot(dx,dy);
+        const radius = 140;
+        if(dist < radius){
+          const force = (1 - dist/radius) * 46;
+          const ang = Math.atan2(dy,dx);
+          targetX += Math.cos(ang)*force;
+          targetY += Math.sin(ang)*force;
         }
+      }
+      // spring toward target (breathing point or pushed point)
+      n.vx += (targetX - n.x) * 0.06;
+      n.vy += (targetY - n.y) * 0.06;
+      n.vx *= 0.78; n.vy *= 0.78;
+      n.x += n.vx; n.y += n.vy;
+    });
 
-        if(!isAttacker) {
-            triggerAITurn();
+    this.ripples.forEach(rp=>{ rp.radius += 6; rp.alpha *= 0.965; });
+    this.ripples = this.ripples.filter(rp=>rp.alpha > 0.02);
+  }
+
+  draw(){
+    const ctx = this.ctx;
+    ctx.clearRect(0,0,this.w,this.h);
+
+    // edges
+    ctx.lineWidth = 1.3;
+    this.edges.forEach(([i,j])=>{
+      const a=this.nodes[i], b=this.nodes[j];
+      let alpha = 0.14;
+      this.ripples.forEach(rp=>{
+        const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+        const d = Math.hypot(mx-rp.x, my-rp.y);
+        if(Math.abs(d-rp.radius) < 40) alpha = Math.max(alpha, rp.alpha*0.9);
+      });
+      ctx.strokeStyle = `rgba(29,29,31,${alpha})`;
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    });
+
+    // nodes
+    this.nodes.forEach(n=>{
+      let r = 4.2;
+      this.ripples.forEach(rp=>{
+        const d = Math.hypot(n.x-rp.x, n.y-rp.y);
+        if(Math.abs(d-rp.radius) < 34) r += rp.alpha*7;
+      });
+      ctx.beginPath();
+      ctx.arc(n.x,n.y,r,0,Math.PI*2);
+      ctx.fillStyle = 'rgba(29,29,31,0.22)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(n.x,n.y,r+0,0,Math.PI*2);
+      ctx.strokeStyle = 'rgba(29,29,31,0.32)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+
+    // ripple rings themselves
+    this.ripples.forEach(rp=>{
+      ctx.beginPath();
+      ctx.arc(rp.x, rp.y, rp.radius, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(0,113,227,${rp.alpha})`;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    });
+  }
+}
+
+/* ================================================================
+   Confetti — canvas particle burst for the victory screen
+   ================================================================ */
+class Confetti{
+  constructor(canvas){
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.particles = [];
+    this.running = false;
+    const dpr = Math.min(window.devicePixelRatio||1,2);
+    this.resize = ()=>{
+      canvas.width = window.innerWidth*dpr; canvas.height = window.innerHeight*dpr;
+      canvas.style.width = window.innerWidth+'px'; canvas.style.height = window.innerHeight+'px';
+      this.ctx.setTransform(dpr,0,0,dpr,0,0);
+      this.w = window.innerWidth; this.h = window.innerHeight;
+    };
+    window.addEventListener('resize', this.resize);
+    this.resize();
+  }
+  burst(color){
+    const colors = color === 'orange'
+      ? ['#ff9f0a','#ffb340','#1d1d1f','#6e6e73']
+      : ['#0071e3','#30d158','#1d1d1f','#6e6e73'];
+    for(let i=0;i<160;i++){
+      this.particles.push({
+        x: this.w/2 + (Math.random()-0.5)*140,
+        y: this.h*0.32,
+        vx: (Math.random()-0.5)*11,
+        vy: -Math.random()*9 - 3,
+        g: 0.22 + Math.random()*0.08,
+        size: 4 + Math.random()*5,
+        rot: Math.random()*Math.PI*2,
+        vr: (Math.random()-0.5)*0.3,
+        color: colors[Math.floor(Math.random()*colors.length)],
+        life: 1
+      });
+    }
+    if(!this.running){ this.running = true; requestAnimationFrame(this.loop.bind(this)); }
+  }
+  loop(){
+    this.ctx.clearRect(0,0,this.w,this.h);
+    this.particles.forEach(p=>{
+      p.vy += p.g; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life -= 0.006;
+    });
+    this.particles = this.particles.filter(p=>p.life>0 && p.y < this.h+40);
+    this.ctx.save();
+    this.particles.forEach(p=>{
+      this.ctx.save();
+      this.ctx.translate(p.x,p.y);
+      this.ctx.rotate(p.rot);
+      this.ctx.globalAlpha = Math.max(p.life,0);
+      this.ctx.fillStyle = p.color;
+      this.ctx.fillRect(-p.size/2,-p.size/2*0.6,p.size,p.size*0.6);
+      this.ctx.restore();
+    });
+    this.ctx.restore();
+    if(this.particles.length>0){
+      requestAnimationFrame(this.loop.bind(this));
+    } else {
+      this.running = false;
+    }
+  }
+}
+
+/* ================================================================
+   GraphAI — depth-limited minimax with alpha-beta pruning.
+   The full game tree (edges × remaining numbers, every ply) is far
+   too large to search exactly in-browser, so the AI:
+     1. Restricts candidate numbers per ply to the extremes + median
+        of the remaining pool (optimal play tends to favor extremes).
+     2. Restricts candidate edges at non-root plies to a bounded
+        subset for tractable branching.
+     3. Evaluates unresolved states with a Kruskal/union-find
+        estimate that treats still-unassigned edges as carrying the
+        average of the remaining numbers.
+   ================================================================ */
+class GraphAI{
+  constructor(difficulty){
+    this.difficulty = difficulty;
+    this.depth = { easy:1, normal:2, hard:3 }[difficulty];
+    this.edgeBranch = { easy:5, normal:7, hard:10 }[difficulty];
+    this.randomness = { easy:0.4, normal:0.12, hard:0 }[difficulty];
+  }
+
+  candidateNumbers(avNums){
+    const s = [...avNums].sort((a,b)=>a-b);
+    const set = new Set();
+    if(s.length){ set.add(s[0]); set.add(s[s.length-1]); }
+    if(s.length>2) set.add(s[Math.floor(s.length/2)]);
+    if(s.length>4){ set.add(s[1]); set.add(s[s.length-2]); }
+    return [...set];
+  }
+
+  candidateEdges(avEdges, limit){
+    if(avEdges.length<=limit) return avEdges;
+    // deterministic-ish spread across the available edge list
+    const out = [];
+    const step = avEdges.length/limit;
+    for(let i=0;i<limit;i++) out.push(avEdges[Math.floor(i*step)]);
+    return [...new Set(out)];
+  }
+
+  // Estimate C given the current partial assignment: assigned edges keep
+  // their real weight, unassigned edges are treated as carrying the
+  // average of the still-unused numbers.
+  estimateC(game){
+    const avNums = [];
+    for(let i=1;i<=game.totalEdges;i++) if(!game.usedNumbers.has(i)) avNums.push(i);
+    const avg = avNums.length ? avNums.reduce((a,b)=>a+b,0)/avNums.length : 0;
+
+    const list = game.edges.map(e=>({ u:e.u, v:e.v, w: e.weight!==null ? e.weight : avg }));
+    list.sort((a,b)=>a.w-b.w);
+    const uf = new UnionFind(game.mapDef.nodes.length);
+    const sIdx = game.sIdx, tIdx = game.tIdx;
+    for(const e of list){
+      uf.union(e.u, e.v);
+      if(uf.find(sIdx)===uf.find(tIdx)) return e.w;
+    }
+    return avg;
+  }
+
+  applyMove(game, eid, num){
+    const e = game.edges[eid];
+    const snap = { eid, prevWeight:e.weight, num };
+    e.weight = num;
+    game.usedNumbers.add(num);
+    return snap;
+  }
+  undoMove(game, snap){
+    game.edges[snap.eid].weight = snap.prevWeight;
+    game.usedNumbers.delete(snap.num);
+  }
+
+  minimax(game, depth, alpha, beta, maximizing, aiIsAttacker){
+    if(depth===0 || game.usedNumbers.size===game.totalEdges){
+      const c = this.estimateC(game);
+      return aiIsAttacker ? c : -c;
+    }
+    const avEdgesFull = game.edges.filter(e=>e.weight===null).map(e=>e.id);
+    const avEdges = this.candidateEdges(avEdgesFull, this.edgeBranch);
+    const avNums = [];
+    for(let i=1;i<=game.totalEdges;i++) if(!game.usedNumbers.has(i)) avNums.push(i);
+    const candNums = this.candidateNumbers(avNums);
+
+    if(maximizing){
+      let value = -Infinity;
+      for(const eid of avEdges){
+        for(const num of candNums){
+          const snap = this.applyMove(game, eid, num);
+          value = Math.max(value, this.minimax(game, depth-1, alpha, beta, false, aiIsAttacker));
+          this.undoMove(game, snap);
+          alpha = Math.max(alpha, value);
+          if(alpha>=beta) return value;
         }
-    }
-
-    function calculateCAndGetPath() {
-        const sortedEdges = [...edges].map(e => ({
-            ...e,
-            weight: e.weight !== null ? e.weight : 0
-        })).sort((a, b) => a.weight - b.weight);
-
-        const mapDef = mapsData[selectedMapIdx];
-        const uf = new UnionFind(mapDef.nodes.length); 
-        
-        let sNodeIdx = mapDef.nodes.findIndex(n => n.isS);
-        let tNodeIdx = mapDef.nodes.findIndex(n => n.isT);
-        let currentC = 0;
-        let includedEdgeIds = [];
-
-        for(const e of sortedEdges) {
-            uf.union(e.u, e.v);
-            includedEdgeIds.push(e.id);
-            if(uf.find(sNodeIdx) === uf.find(tNodeIdx)) {
-                currentC = e.weight;
-                break;
-            }
+      }
+      return value;
+    } else {
+      let value = Infinity;
+      for(const eid of avEdges){
+        for(const num of candNums){
+          const snap = this.applyMove(game, eid, num);
+          value = Math.min(value, this.minimax(game, depth-1, alpha, beta, true, aiIsAttacker));
+          this.undoMove(game, snap);
+          beta = Math.min(beta, value);
+          if(beta<=alpha) return value;
         }
-        return { currentC, includedEdgeIds };
+      }
+      return value;
+    }
+  }
+
+  chooseMove(game){
+    const aiIsAttacker = game.aiIsAttacker;
+    if(Math.random() < this.randomness){
+      const avEdges = game.edges.filter(e=>e.weight===null).map(e=>e.id);
+      const avNums = [];
+      for(let i=1;i<=game.totalEdges;i++) if(!game.usedNumbers.has(i)) avNums.push(i);
+      return {
+        edgeId: avEdges[Math.floor(Math.random()*avEdges.length)],
+        number: avNums[Math.floor(Math.random()*avNums.length)]
+      };
     }
 
-    function selectEdge(id) {
-        if(edges[id].weight !== null) return;
-        edges.forEach(e => e.lineEl.classList.remove('selected'));
-        selectedEdgeId = id;
-        edges[id].lineEl.classList.add('selected');
+    const avEdgesFull = game.edges.filter(e=>e.weight===null).map(e=>e.id);
+    const avNums = [];
+    for(let i=1;i<=game.totalEdges;i++) if(!game.usedNumbers.has(i)) avNums.push(i);
+    const candNums = this.candidateNumbers(avNums);
+
+    let best = -Infinity, bestMove = null;
+    for(const eid of avEdgesFull){
+      for(const num of candNums){
+        const snap = this.applyMove(game, eid, num);
+        const score = this.minimax(game, this.depth-1, -Infinity, Infinity, false, aiIsAttacker);
+        this.undoMove(game, snap);
+        if(score > best){ best = score; bestMove = { edgeId:eid, number:num }; }
+      }
     }
-
-    function assignNumber(num) {
-        if(selectedEdgeId === null || usedNumbers.has(num)) return;
-        
-        const edge = edges[selectedEdgeId];
-        edge.weight = num;
-        
-        edge.lineEl.classList.remove('selected');
-        edge.lineEl.classList.add('assigned');
-        edge.labelEl.innerText = num;
-        edge.labelEl.classList.add('visible');
-        
-        usedNumbers.add(num);
-        document.getElementById(`num-${num}`).disabled = true;
-        selectedEdgeId = null;
-
-        if(usedNumbers.size === TOTAL_EDGES) {
-            endGame();
-        } else {
-            triggerAITurn();
-        }
+    if(!bestMove){
+      // fallback safety net
+      bestMove = { edgeId: avEdgesFull[0], number: avNums[0] };
     }
+    return bestMove;
+  }
+}
 
-    function triggerAITurn() {
-        const loading = document.getElementById('ai-loading');
-        loading.style.display = 'flex';
-        
-        const delay = Math.floor(Math.random() * 2000) + 1500;
-        
-        setTimeout(() => {
-            const availableEdges = edges.filter(e => e.weight === null);
-            const availableNums = [];
-            for(let i=1; i<=TOTAL_EDGES; i++) if(!usedNumbers.has(i)) availableNums.push(i);
-            
-            const randEdge = availableEdges[Math.floor(Math.random() * availableEdges.length)];
-            const randNum = availableNums[Math.floor(Math.random() * availableNums.length)];
-            
-            randEdge.weight = randNum;
-            randEdge.lineEl.classList.add('assigned');
-            randEdge.labelEl.innerText = randNum;
-            randEdge.labelEl.classList.add('visible');
-            
-            usedNumbers.add(randNum);
-            document.getElementById(`num-${randNum}`).disabled = true;
-            
-            loading.style.display = 'none';
+/* ================================================================
+   BoardRenderer — draws nodes/edges for a mapDef into a container.
+   Used both for the live game board and the map-card thumbnails.
+   ================================================================ */
+class BoardRenderer{
+  static drawThumb(container, mapDef){
+    container.innerHTML = '';
+    const scaleX = container.clientWidth ? container.clientWidth/900 : 1;
+    const svgWrap = document.createElement('div');
+    svgWrap.style.cssText = `position:absolute; inset:0; transform:scale(${container.clientWidth/900}); transform-origin: top left; width:900px; height:460px;`;
+    mapDef.edges.forEach(([u,v])=>{
+      const a = mapDef.nodes[u], b = mapDef.nodes[v];
+      const len = Math.hypot(b.x-a.x, b.y-a.y);
+      const ang = Math.atan2(b.y-a.y, b.x-a.x)*180/Math.PI;
+      const line = document.createElement('div');
+      line.style.cssText = `position:absolute; left:${a.x}px; top:${a.y-1.5}px; width:${len}px; height:3px; background:#d2d2d7; transform-origin:0 50%; transform:rotate(${ang}deg); border-radius:2px;`;
+      svgWrap.appendChild(line);
+    });
+    mapDef.nodes.forEach(n=>{
+      const d = document.createElement('div');
+      const isEnd = n.isS || n.isT;
+      d.style.cssText = `position:absolute; left:${n.x-9}px; top:${n.y-9}px; width:18px; height:18px; border-radius:50%; background:${n.isS?'#1d1d1f':'#fff'}; border:2px solid ${isEnd?'#1d1d1f':'#c7c7cc'}; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:800; color:${n.isS?'#fff':'#6e6e73'};`;
+      d.innerText = n.l;
+      svgWrap.appendChild(d);
+    });
+    container.appendChild(svgWrap);
+  }
 
-            if(usedNumbers.size === TOTAL_EDGES) {
-                endGame();
-            }
-        }, delay);
+  static drawBoard(container, mapDef, onEdgeClick){
+    container.querySelectorAll('.node,.edge-hit,.edge-label').forEach(el=>el.remove());
+    const edgeObjs = [];
+    mapDef.edges.forEach(([u,v], idx)=>{
+      const a = mapDef.nodes[u], b = mapDef.nodes[v];
+      const len = Math.hypot(b.x-a.x, b.y-a.y);
+      const ang = Math.atan2(b.y-a.y, b.x-a.x)*180/Math.PI;
+      const midX = (a.x+b.x)/2, midY = (a.y+b.y)/2;
+
+      const hit = document.createElement('div');
+      hit.className = 'edge-hit';
+      hit.style.width = `${len}px`;
+      hit.style.left = `${a.x}px`;
+      hit.style.top = `${a.y - 11}px`;
+      hit.style.transform = `rotate(${ang}deg)`;
+      const line = document.createElement('div');
+      line.className = 'edge-line';
+      hit.appendChild(line);
+      hit.addEventListener('click', ()=>onEdgeClick(idx));
+      container.appendChild(hit);
+
+      const label = document.createElement('div');
+      label.className = 'edge-label';
+      label.style.left = `${midX}px`;
+      label.style.top = `${midY}px`;
+      label.addEventListener('click', ()=>onEdgeClick(idx));
+      container.appendChild(label);
+
+      edgeObjs.push({ id:idx, u, v, weight:null, hitEl:hit, lineEl:line, labelEl:label });
+    });
+
+    mapDef.nodes.forEach(n=>{
+      const d = document.createElement('div');
+      d.className = `node ${n.isS?'s-node':''} ${n.isT?'t-node':''}`;
+      d.style.left = `${n.x}px`;
+      d.style.top = `${n.y}px`;
+      d.innerText = n.l;
+      container.appendChild(d);
+    });
+
+    return edgeObjs;
+  }
+}
+
+/* ================================================================
+   Game — state machine for a single match
+   ================================================================ */
+class Game{
+  constructor(mapIdx, humanIsAttacker, difficulty){
+    this.mapDef = MapManager.get(mapIdx);
+    this.mapIdx = mapIdx;
+    this.humanIsAttacker = humanIsAttacker;
+    this.aiIsAttacker = !humanIsAttacker;
+    this.ai = new GraphAI(difficulty);
+    this.usedNumbers = new Set();
+    this.sIdx = this.mapDef.nodes.findIndex(n=>n.isS);
+    this.tIdx = this.mapDef.nodes.findIndex(n=>n.isT);
+    this.selectedEdgeId = null;
+    this.board = $('#board');
+    this.edges = BoardRenderer.drawBoard(this.board, this.mapDef, (id)=>this.onEdgeClick(id));
+    this.totalEdges = this.edges.length;
+    this.threshold = Math.round((this.totalEdges + 1) / 2);
+    this.onFinished = null;
+    this.buildNumpad();
+    this.updateStatus();
+    if(!this.humanIsAttacker === false && !humanIsAttacker){
+      // defender case handled below uniformly
     }
+    // If AI goes first in turn order? Attacker always assumed to start.
+    if(this.aiIsAttacker){ this.triggerAI(); }
+  }
 
-    function endGame() {
-        const { currentC, includedEdgeIds } = calculateCAndGetPath();
-        
-        includedEdgeIds.forEach(id => {
-            edges[id].lineEl.classList.add('critical-path');
-        });
-
-        let resultMsg = "";
-        if (currentC > 6) {
-            resultMsg = isAttacker ? "승리" : "패배";
-        } else if (currentC < 6) {
-            resultMsg = !isAttacker ? "승리" : "패배";
-        } else {
-            resultMsg = "무승부";
-        }
-
-        setTimeout(() => {
-            alert(`게임 종료!\n\n모든 간선 배정이 완료되었습니다.\n최종 그래프 난이도(C): ${currentC}\n(빨간색으로 표시된 간선들이 난이도를 결정한 핵심 경로입니다)\n\n결과: ${resultMsg}`);
-        }, 100);
+  buildNumpad(){
+    const pad = $('#numpad');
+    pad.innerHTML = '';
+    for(let i=1;i<=this.totalEdges;i++){
+      const btn = document.createElement('button');
+      btn.className = 'num-btn';
+      btn.innerText = i;
+      btn.id = `num-${i}`;
+      btn.addEventListener('click', ()=>this.assignNumber(i));
+      pad.appendChild(btn);
     }
+  }
+
+  updateStatus(aiTurn=false){
+    const roleLabel = this.humanIsAttacker ? 'Attacker' : 'Defender';
+    $('#turn-status').innerHTML = `${this.mapDef.title} <span class="role-tag">— you are the ${roleLabel}</span>`;
+    const dot = $('#turn-dot');
+    const text = $('#turn-badge-text');
+    if(aiTurn){ dot.classList.add('wait'); text.innerText = "Opponent's Turn"; }
+    else { dot.classList.remove('wait'); text.innerText = 'Your Turn'; }
+  }
+
+  onEdgeClick(id){
+    if(this.edges[id].weight !== null) return;
+    if($('#ai-loading').classList.contains('show')) return;
+    this.edges.forEach(e=>e.hitEl.classList.remove('selected'));
+    this.selectedEdgeId = id;
+    this.edges[id].hitEl.classList.add('selected');
+  }
+
+  assignNumber(num){
+    if(this.selectedEdgeId===null || this.usedNumbers.has(num)) return;
+    if($('#ai-loading').classList.contains('show')) return;
+    this.commitMove(this.selectedEdgeId, num);
+    this.selectedEdgeId = null;
+    if(this.usedNumbers.size === this.totalEdges){ this.finish(); }
+    else { this.triggerAI(); }
+  }
+
+  commitMove(edgeId, num){
+    const e = this.edges[edgeId];
+    e.weight = num;
+    e.hitEl.classList.remove('selected');
+    e.hitEl.classList.add('assigned');
+    e.labelEl.innerText = num;
+    e.labelEl.classList.add('visible','assigned-label');
+    this.usedNumbers.add(num);
+    const btn = document.getElementById(`num-${num}`);
+    if(btn) btn.disabled = true;
+  }
+
+  triggerAI(){
+    const loading = $('#ai-loading');
+    loading.classList.add('show');
+    this.updateStatus(true);
+    const delay = 650 + Math.random()*750;
+    setTimeout(()=>{
+      const move = this.ai.chooseMove(this);
+      this.commitMove(move.edgeId, move.number);
+      loading.classList.remove('show');
+      this.updateStatus(false);
+      if(this.usedNumbers.size === this.totalEdges){ this.finish(); }
+    }, delay);
+  }
+
+  finish(){
+    if(this.onFinished) this.onFinished(this);
+  }
+
+  // Exact final computation once every edge is assigned (real weights only)
+  calculateFinalC(){
+    const sorted = [...this.edges].sort((a,b)=>a.weight-b.weight);
+    const uf = new UnionFind(this.mapDef.nodes.length);
+    let C = 0;
+    const includedIds = [];
+    for(const e of sorted){
+      uf.union(e.u, e.v);
+      includedIds.push(e.id);
+      if(uf.find(this.sIdx)===uf.find(this.tIdx)){ C = e.weight; break; }
+    }
+    return { C, includedIds, sorted };
+  }
+}
+
+/* ================================================================
+   UIManager — screens, transitions, deck, rules, role reveal,
+   union-find calculation animation, victory screen.
+   ================================================================ */
+class UIManager{
+  constructor(){
+    this.screens = {};
+    $$('.screen').forEach(s=> this.screens[s.id] = s);
+    this.difficulty = 'normal';
+    this.game = null;
+    this.confetti = new Confetti($('#victory-canvas'));
+    this.introLiving = new IntroLiving($('#intro-canvas'));
+    this.bindStaticEvents();
+  }
+
+  show(id){
+    Object.values(this.screens).forEach(s=>s.classList.remove('active'));
+    this.screens[id].classList.add('active');
+  }
+
+  bindStaticEvents(){
+    $('#btn-rules').addEventListener('click', ()=>this.openRules());
+    $('#btn-close-rules').addEventListener('click', ()=>this.closeRules());
+    $('#btn-show-rules').addEventListener('click', ()=>this.openRules());
+    $('#btn-start').addEventListener('click', ()=>this.show('screen-difficulty'));
+    $('#btn-home').addEventListener('click', ()=>location.reload());
+    $('#btn-victory-home').addEventListener('click', ()=>location.reload());
+    $('#btn-play-again').addEventListener('click', ()=>location.reload());
+
+    $$('.diff-card').forEach(card=>{
+      card.addEventListener('click', ()=>{
+        $$('.diff-card').forEach(c=>c.classList.remove('chosen'));
+        card.classList.add('chosen');
+        this.difficulty = card.dataset.diff;
+        $('#btn-diff-continue').disabled = false;
+      });
+    });
+    $('#btn-diff-continue').addEventListener('click', ()=>this.startRoleReveal());
+  }
+
+  openRules(){ this.show('screen-rules'); }
+  closeRules(){
+    // return to whichever screen was logically "under" the rules —
+    // simplest reliable approach: go back to intro only if nothing
+    // has started yet, otherwise return to the game screen.
+    if(this.game){ this.show('screen-game'); }
+    else { this.show('screen-intro'); }
+  }
+
+  async startRoleReveal(){
+    this.humanIsAttacker = Math.random() > 0.5;
+    const overlay = $('#fog-overlay');
+    const roleText = $('#role-text');
+    roleText.innerHTML = `<small>You Are</small>${this.humanIsAttacker ? 'Attacker' : 'Defender'}`;
+    overlay.classList.add('active');
+    await sleep(120);
+    roleText.classList.add('show');
+    await sleep(1500);
+    roleText.classList.remove('show');
+    await sleep(500);
+    overlay.classList.remove('active');
+    await sleep(150);
+
+    if(this.humanIsAttacker){
+      this.renderDeck();
+      this.show('screen-mapselect');
+    } else {
+      const randomIdx = Math.floor(Math.random()*MapManager.count());
+      this.launchGame(randomIdx);
+    }
+  }
+
+  renderDeck(){
+    const deck = $('#deck');
+    const dotsWrap = $('#deck-index');
+    deck.innerHTML = ''; dotsWrap.innerHTML = '';
+    const maps = MapManager.maps;
+    this.deckOrder = maps.map((_,i)=>i);
+
+    maps.forEach((m, i)=>{
+      const card = document.createElement('div');
+      card.className = 'map-card';
+      const depth = maps.length - 1 - i;
+      card.style.zIndex = i;
+      card.style.transform = `translate(${depth*7}px, ${depth*10}px) rotate(${(i%2?1:-1)*depth*0.6}deg) scale(${1 - depth*0.02})`;
+
+      const head = document.createElement('div');
+      head.className = 'card-head';
+      head.innerHTML = `<h3>${m.title}</h3><p>${m.desc}</p>`;
+      const thumb = document.createElement('div');
+      thumb.className = 'card-thumb';
+
+      card.appendChild(head);
+      card.appendChild(thumb);
+      BoardRenderer.drawThumb(thumb, m);
+
+      card.addEventListener('mouseenter', ()=>{
+        card.style.transform = `translate(${depth*7}px, ${depth*10 - 26}px) rotate(0deg) scale(1.04)`;
+      });
+      card.addEventListener('mouseleave', ()=>{
+        card.style.transform = `translate(${depth*7}px, ${depth*10}px) rotate(${(i%2?1:-1)*depth*0.6}deg) scale(${1 - depth*0.02})`;
+      });
+      card.addEventListener('click', ()=>this.flyCardToBoard(card, i));
+
+      deck.appendChild(card);
+
+      const dot = document.createElement('div');
+      dot.className = 'dot' + (i===0 ? ' active' : '');
+      dotsWrap.appendChild(dot);
+    });
+  }
+
+  flyCardToBoard(card, mapIdx){
+    $$('.map-card').forEach(c=>{ if(c!==card){ c.style.transition='opacity .4s ease, transform .4s ease'; c.style.opacity='0'; c.style.pointerEvents='none'; } });
+    card.classList.add('flying');
+    card.style.transform = 'translate(0px,-40px) scale(1.5)';
+    card.style.opacity = '0';
+    setTimeout(()=>{ this.launchGame(mapIdx); }, 520);
+  }
+
+  launchGame(mapIdx){
+    this.show('screen-game');
+    this.game = new Game(mapIdx, this.humanIsAttacker, this.difficulty);
+    this.game.onFinished = (g)=>this.runUnionFindAnimation(g);
+  }
+
+  async runUnionFindAnimation(game){
+    this.show('screen-uf');
+    await sleep(250);
+    this.show('screen-game');
+    const toast = $('#uf-toast');
+    const { C, includedIds, sorted } = game.calculateFinalC();
+
+    for(const e of sorted){
+      const edgeObj = game.edges[e.id];
+      toast.innerText = `weight = ${e.weight}`;
+      toast.classList.add('show');
+      await sleep(420);
+      const isFinal = e.id === includedIds[includedIds.length-1];
+      if(isFinal){
+        edgeObj.hitEl.classList.add('critical-path');
+        edgeObj.labelEl.classList.add('critical-label');
+        toast.innerText = `Connected! C = ${C}`;
+        await sleep(900);
+        break;
+      } else {
+        edgeObj.hitEl.classList.add('uf-green');
+        edgeObj.labelEl.classList.add('uf-green-label');
+        await sleep(180);
+      }
+    }
+    toast.classList.remove('show');
+    await sleep(400);
+    this.showVictory(game, C);
+  }
+
+  showVictory(game, C){
+    const attackerWins = C > game.threshold;
+    const defenderWins = C < game.threshold;
+    let resultText, humanWon;
+    if(attackerWins){ resultText = 'Attacker Wins'; humanWon = game.humanIsAttacker; }
+    else if(defenderWins){ resultText = 'Defender Wins'; humanWon = !game.humanIsAttacker; }
+    else { resultText = 'Draw'; humanWon = null; }
+
+    $('#victory-map-label').innerText = game.mapDef.title;
+    $('#victory-c').innerText = `C = ${C}`;
+    $('#victory-result').innerText = resultText;
+    $('.victory-title').innerText = humanWon===false ? 'Defeat' : 'Victory';
+
+    this.show('screen-victory');
+    this.confetti.burst(attackerWins ? 'orange' : 'blue');
+  }
+}
+
+/* ---------------- boot ---------------- */
+window.addEventListener('DOMContentLoaded', ()=>{
+  new UIManager();
+});
 </script>
 </body>
 </html>
