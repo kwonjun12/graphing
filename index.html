@@ -49,10 +49,9 @@
     #screen-role-reveal { z-index: 20; background: rgba(255, 255, 255, 0.3); }
     #role-text { font-size: 3rem; font-weight: bold; opacity: 0; transition: opacity 0.5s; text-shadow: 0 0 10px rgba(255,255,255,0.8); }
 
-    /* Map Selection Screen - 확실한 중앙 정렬 */
-    #screen-mapselect { z-index: 10; justify-content: center; align-items: center; display: none; }
-    #screen-mapselect.active { display: flex; }
-    #screen-mapselect h2 { margin-bottom: 20px; font-size: 2rem; }
+    /* Map Selection Screen */
+    #screen-mapselect { z-index: 10; justify-content: center; align-items: center; }
+    #screen-mapselect h2 { margin-bottom: 25px; font-size: 2rem; }
     .map-grid { display: grid; grid-template-columns: repeat(2, 420px); grid-template-rows: repeat(2, 240px); gap: 20px; justify-content: center; align-content: center; }
     .map-card { border: 2px solid #e0e0e0; border-radius: 12px; cursor: pointer; text-align: center; transition: all 0.3s; width: 420px; height: 240px; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; background: #fafafa; position: relative; overflow: hidden; }
     .map-card:hover { border-color: #3498db; background: #f0f8ff; }
@@ -66,21 +65,25 @@
     .header-bar { width: 100%; max-width: 1000px; display: flex; justify-content: space-between; padding: 10px 20px; margin-bottom: 10px; font-size: 1.1rem; color: #555; }
     .header-bar span { cursor: pointer; }
     .header-bar span:hover { color: #000; font-weight: bold; }
-    .status-text { font-size: 1.3rem; font-weight: bold; margin-bottom: 10px; }
-    #c-score-display { font-size: 1.1rem; color: #e74c3c; font-weight: bold; margin-bottom: 15px; border: 2px solid #e74c3c; padding: 6px 18px; border-radius: 30px; transition: all 0.3s; }
+    .status-text { font-size: 1.3rem; font-weight: bold; margin-bottom: 20px; }
     
     /* Board */
     .board-container { border: 1px solid #e0e0e0; border-radius: 12px; position: relative; background: #fafafa; margin-bottom: 20px; width: 800px; height: 450px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-    .node { position: absolute; width: 40px; height: 40px; background: #fff; border: 2px solid #b0b0b0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1rem; z-index: 2; color: #666; transform: translate(-50%, -50%); }
+    
+    /* 노드가 선보다 항상 위에 오도록 z-index를 높게 설정 (z-index: 5) */
+    .node { position: absolute; width: 40px; height: 40px; background: #fff; border: 2px solid #b0b0b0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1rem; z-index: 5; color: #666; transform: translate(-50%, -50%); }
     .node.s-node { background: #34495e; color: #fff; border-color: #34495e; }
     .node.t-node { border: 4px double #b0b0b0; }
+    
+    /* 간선 및 핵심 경로 (z-index: 1~2로 설정하여 노드 아래에 위치) */
     .edge-line { position: absolute; background: #d0d0d0; transform-origin: 0 50%; cursor: pointer; z-index: 1; transition: background 0.3s; height: 6px; }
     .edge-line:hover { background: #999; }
     .edge-line.selected { background: #3498db; }
-    .edge-line.assigned { background: #2c3e50; cursor: default; }
+    .edge-line.assigned { background: #2980b9; cursor: default; }
+    .edge-line.critical-path { background: #e74c3c !important; height: 8px; z-index: 2; }
     
     /* Edge Weight Label */
-    .edge-label { position: absolute; background: #fff; border: 2px solid #b0b0b0; color: #333; font-size: 0.95rem; font-weight: bold; border-radius: 6px; padding: 2px 6px; z-index: 3; transform: translate(-50%, -50%); cursor: pointer; display: none; }
+    .edge-label { position: absolute; background: #fff; border: 2px solid #2980b9; color: #2980b9; font-size: 0.95rem; font-weight: bold; border-radius: 6px; padding: 2px 6px; z-index: 4; transform: translate(-50%, -50%); cursor: pointer; display: none; }
     .edge-label.visible { display: flex; align-items: center; justify-content: center; }
 
     /* Number Selector */
@@ -124,11 +127,11 @@
                 <li><strong>시작점(S)과 목표점(T):</strong> 공격자와 수비자는 S에서 T로 가는 경로를 완성해야 합니다.</li>
                 <li><strong>행동:</strong> 자신의 턴에 '배정되지 않은 간선' 하나와 '사용되지 않은 숫자' 하나를 골라 간선에 배정합니다.</li>
                 <li><strong>경로의 난이도:</strong> S에서 T로 가는 특정 경로에 배정된 숫자 중 '가장 큰 값'이 해당 경로의 난이도입니다.</li>
-                <li><strong>그래프의 난이도(C):</strong> S에서 T로 가는 모든 가능한 경로들의 난이도 중 '가장 작은 값'이 최종 C가 됩니다. (미배정 간선은 0으로 간주하여 실시간 C값 계산)</li>
+                <li><strong>그래프의 난이도(C) 책정 기준:</strong> S에서 T로 연결되는 모든 가능한 경로들을 조사할 때, <strong>각 경로마다 포함된 간선 중 가장 큰 숫자를 구하고, 그 최댓값들 중에서 가장 작은 값(최솟값)</strong>이 최종 그래프의 난이도 C가 됩니다. (미배정 간선은 가중치 0으로 처리하여 계산)</li>
             </ul>
             <p><strong>승리 조건:</strong> 공격자는 C를 최대화하는 것이 목표이며, 수비자는 C를 최소화하는 것이 목표입니다.<br>(기준점 C=6: C가 7 이상이면 공격자 승, 5 이하면 수비자 승, 6면 무승부)</p>
-            <li><strong>KOI 2026 1차대회 중등부 20번 문제(간선 게임)를 응용하여 제작되었습니다.</li>
-            <div style="text-align: center; margin-top: 30px;">
+            <p style="font-size: 0.85rem; color: #888; margin-top: 15px;">KOI 2026 1차대회 중등부 20번 문제(간선 게임)를 응용하여 제작되었습니다.</p>
+            <div style="text-align: center; margin-top: 25px;">
                 <button class="btn btn-black" onclick="closeRules()">닫기</button>
             </div>
         </div>
@@ -142,9 +145,7 @@
     <!-- Map Selection Screen -->
     <div id="screen-mapselect" class="screen">
         <h2>플레이할 맵을 선택하십시오</h2>
-        <div class="map-grid" id="map-grid">
-            <!-- 맵 카드가 JS로 주입됩니다 -->
-        </div>
+        <div class="map-grid" id="map-grid"></div>
     </div>
 
     <!-- Game Screen -->
@@ -154,7 +155,6 @@
             <span onclick="showRules()">Show me the rules</span>
         </div>
         
-        <div id="c-score-display">현재 난이도 (C): 0</div>
         <div class="status-text" id="turn-status"></div>
         
         <div class="board-container" id="board">
@@ -188,7 +188,7 @@
     let isAttacker = true;
     let selectedEdgeId = null;
     let selectedMapIdx = 0;
-    const TOTAL_EDGES = 11; // 2x3 직사각형 격자 기반 11개 간선
+    const TOTAL_EDGES = 11; 
     let edges = []; 
     let usedNumbers = new Set();
     
@@ -201,13 +201,8 @@
     const board = document.getElementById('board');
     const numpad = document.getElementById('numpad');
     const turnStatus = document.getElementById('turn-status');
-    const cScoreDisplay = document.getElementById('c-score-display');
     const roleText = document.getElementById('role-text');
 
-    // 2x3 직사각형 그리드 형태의 맵 데이터 (노드 6개, 간선 11개 표준화)
-    // 노드 배치: 
-    // [0: S(좌상)]   [1: 상중]   [2: 상우]
-    // [3: 좌하]       [4: 하중]   [5: T(우하)]
     const mapsData = [
         { 
             title: "Map 1 (정통 직사각형 격자)", desc: "기본적인 2x3 직사각형 구조",
@@ -300,15 +295,6 @@
     }
 
     function drawGraph(container, mapDef, isPreview = false) {
-        mapDef.nodes.forEach(n => {
-            const div = document.createElement('div');
-            div.className = `node ${n.isS ? 's-node' : ''} ${n.isT ? 't-node' : ''}`;
-            div.style.left = `${n.x}px`;
-            div.style.top = `${n.y}px`;
-            div.innerText = n.l;
-            container.appendChild(div);
-        });
-
         mapDef.edges.forEach((e, idx) => {
             const u = mapDef.nodes[e[0]], v = mapDef.nodes[e[1]];
             const length = Math.hypot(v.x - u.x, v.y - u.y);
@@ -338,6 +324,15 @@
                 edges.push({ id: idx, u: e[0], v: e[1], weight: null, lineEl: lineDiv, labelEl: labelDiv });
             }
         });
+
+        mapDef.nodes.forEach(n => {
+            const div = document.createElement('div');
+            div.className = `node ${n.isS ? 's-node' : ''} ${n.isT ? 't-node' : ''}`;
+            div.style.left = `${n.x}px`;
+            div.style.top = `${n.y}px`;
+            div.innerText = n.l;
+            container.appendChild(div);
+        });
     }
 
     function initGame() {
@@ -350,7 +345,6 @@
         selectedEdgeId = null;
 
         drawGraph(board, mapsData[selectedMapIdx], false);
-        updateCurrentC();
 
         for(let i = 1; i <= TOTAL_EDGES; i++) {
             const btn = document.createElement('button');
@@ -366,10 +360,9 @@
         }
     }
 
-    function updateCurrentC() {
-        const allEdges = edges.map(e => ({
-            u: e.u,
-            v: e.v,
+    function calculateCAndGetPath() {
+        const sortedEdges = [...edges].map(e => ({
+            ...e,
             weight: e.weight !== null ? e.weight : 0
         })).sort((a, b) => a.weight - b.weight);
 
@@ -379,17 +372,17 @@
         let sNodeIdx = mapDef.nodes.findIndex(n => n.isS);
         let tNodeIdx = mapDef.nodes.findIndex(n => n.isT);
         let currentC = 0;
+        let includedEdgeIds = [];
 
-        for(const e of allEdges) {
+        for(const e of sortedEdges) {
             uf.union(e.u, e.v);
+            includedEdgeIds.push(e.id);
             if(uf.find(sNodeIdx) === uf.find(tNodeIdx)) {
                 currentC = e.weight;
                 break;
             }
         }
-
-        cScoreDisplay.innerText = `현재 난이도 (C): ${currentC}`;
-        return currentC;
+        return { currentC, includedEdgeIds };
     }
 
     function selectEdge(id) {
@@ -413,8 +406,6 @@
         usedNumbers.add(num);
         document.getElementById(`num-${num}`).disabled = true;
         selectedEdgeId = null;
-
-        updateCurrentC();
 
         if(usedNumbers.size === TOTAL_EDGES) {
             endGame();
@@ -445,7 +436,6 @@
             usedNumbers.add(randNum);
             document.getElementById(`num-${randNum}`).disabled = true;
             
-            updateCurrentC();
             loading.style.display = 'none';
 
             if(usedNumbers.size === TOTAL_EDGES) {
@@ -455,19 +445,23 @@
     }
 
     function endGame() {
-        const finalC = updateCurrentC();
-        let resultMsg = "";
+        const { currentC, includedEdgeIds } = calculateCAndGetPath();
         
-        if (finalC > 6) {
+        includedEdgeIds.forEach(id => {
+            edges[id].lineEl.classList.add('critical-path');
+        });
+
+        let resultMsg = "";
+        if (currentC > 6) {
             resultMsg = isAttacker ? "승리" : "패배";
-        } else if (finalC < 6) {
+        } else if (currentC < 6) {
             resultMsg = !isAttacker ? "승리" : "패배";
         } else {
-            resultMsg = "무승부입니다.";
+            resultMsg = "무승부";
         }
 
         setTimeout(() => {
-            alert(`게임 종료!\n\n모든 간선 배정이 완료되었습니다.\n최종 그래프 난이도(C): ${finalC}\n\n결과: ${resultMsg}`);
+            alert(`게임 종료!\n\n모든 간선 배정이 완료되었습니다.\n최종 그래프 난이도(C): ${currentC}\n(빨간색으로 표시된 간선들이 난이도를 결정한 핵심 경로입니다)\n\n결과: ${resultMsg}`);
         }, 100);
     }
 </script>
