@@ -1191,7 +1191,7 @@ class UIManager{
       card.className = 'map-card';
       const depth = maps.length - 1 - i;
       card.style.zIndex = i;
-      card.style.transform = `translate(${depth*7}px, ${depth*10}px) rotate(${(i%2?1:-1)*depth*0.6}deg) scale(${1 - depth*0.02})`;
+      card.style.transform = `translate(${depth*30}px, ${depth*20}px) rotate(${(i%2?1:-1)*depth*1.6}deg) scale(${1 - depth*0.035})`;
 
       const head = document.createElement('div');
       head.className = 'card-head';
@@ -1204,10 +1204,10 @@ class UIManager{
       BoardRenderer.drawThumb(thumb, m);
 
       card.addEventListener('mouseenter', ()=>{
-        card.style.transform = `translate(${depth*7}px, ${depth*10 - 26}px) rotate(0deg) scale(1.04)`;
+        card.style.transform = `translate(${depth*30}px, ${depth*20 - 36}px) rotate(0deg) scale(1.06)`;
       });
       card.addEventListener('mouseleave', ()=>{
-        card.style.transform = `translate(${depth*7}px, ${depth*10}px) rotate(${(i%2?1:-1)*depth*0.6}deg) scale(${1 - depth*0.02})`;
+        card.style.transform = `translate(${depth*30}px, ${depth*20}px) rotate(${(i%2?1:-1)*depth*1.6}deg) scale(${1 - depth*0.035})`;
       });
       card.addEventListener('click', ()=>this.flyCardToBoard(card, i));
 
