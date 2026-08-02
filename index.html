@@ -167,29 +167,39 @@ body{
 .glass-card .rules-footer{ margin-top:30px; display:flex; justify-content:flex-end; gap:12px; }
 .glass-card .cite{ margin-top:22px; font-size:.76rem; color:#a1a1a6; }
 
-/* ---------- Map selection: stacked card deck ---------- */
+/* ---------- Map selection: flat grid ---------- */
 #screen-mapselect{ z-index:10; }
 .deck{
-  position:relative; width:460px; height:300px;
-  perspective:1400px;
+  display:grid;
+  grid-template-columns:repeat(4, 216px);
+  gap:18px;
+  width:auto; height:auto;
+  perspective:none;
 }
 .map-card{
-  position:absolute; left:0; top:0; width:460px; height:300px;
-  background:#fff; border-radius:24px; cursor:pointer; overflow:hidden;
-  box-shadow:0 2px 10px rgba(0,0,0,.08), inset 0 0 0 1px var(--hairline-soft);
-  transition: transform .5s var(--ease-spring), box-shadow .4s var(--ease-out), opacity .4s var(--ease-out);
-  transform-origin:center bottom;
+  position:relative; left:auto; top:auto;
+  width:216px; height:auto;
+  background:#fff; border-radius:20px; cursor:pointer; overflow:hidden;
+  box-shadow:inset 0 0 0 1.4px var(--hairline);
+  transition: transform .3s var(--ease-spring), box-shadow .3s var(--ease-out), opacity .35s var(--ease-out);
+  transform:none;
 }
-.map-card .card-head{ padding:16px 20px 10px; }
-.map-card h3{ font-size:1.02rem; font-weight:700; }
-.map-card p{ font-size:.78rem; color:var(--ink-soft); margin-top:2px; }
-.map-card .card-thumb{ position:relative; width:100%; height:210px; }
-.map-card:hover{ box-shadow:0 26px 46px rgba(0,0,0,.16), inset 0 0 0 1px var(--hairline-soft); }
-.map-card.flying{ transition: transform .85s var(--ease-spring), opacity .6s var(--ease-out); z-index:99; }
-.deck-hint{ margin-top:26px; font-size:.86rem; color:var(--ink-soft); text-align:center; }
-.deck-index{ display:flex; gap:8px; margin-top:20px; }
-.dot{ width:7px; height:7px; border-radius:50%; background:var(--hairline); transition:background .25s; }
-.dot.active{ background:var(--ink); }
+.map-card .card-head{ padding:14px 16px 8px; }
+.map-card h3{ font-size:.92rem; font-weight:700; letter-spacing:-.1px; }
+.map-card p{ font-size:.72rem; color:var(--ink-soft); margin-top:3px; line-height:1.4; min-height:2.8em; }
+.map-card .card-thumb{ position:relative; width:100%; height:112px; }
+.map-card:hover{
+  transform:translateY(-6px);
+  box-shadow:inset 0 0 0 1.6px var(--ink), 0 16px 30px rgba(0,0,0,.10);
+}
+.map-card:active{ transform:translateY(-2px) scale(.985); }
+.map-card.flying{ transition: transform .4s var(--ease-out), opacity .4s var(--ease-out); }
+.map-card.dimmed{
+  opacity:0; transform:scale(.96); pointer-events:none;
+  transition: opacity .35s var(--ease-out), transform .35s var(--ease-out);
+}
+.deck-hint{ margin-top:28px; font-size:.86rem; color:var(--ink-soft); text-align:center; }
+.deck-index{ display:none; }
 
 /* ---------- Game screen ---------- */
 #screen-game{ z-index:10; justify-content:flex-start; padding-top:34px; }
@@ -402,7 +412,7 @@ body{
   <!-- ============ MAP SELECT ============ -->
   <div id="screen-mapselect" class="screen">
     <h2>Choose Your Map</h2>
-    <p class="sub">Hover the deck to browse. Click a map to deploy it to the board.</p>
+    <p class="sub">Pick a map to deploy it to the board.</p>
     <div class="deck" id="deck"></div>
     <div class="deck-index" id="deck-index"></div>
     <p class="deck-hint">Every map is a rectangular expanded graph — no single edge decides the game.</p>
@@ -463,7 +473,7 @@ body{
    GRAPHING — engine
    Architecture:
      UnionFind      — disjoint set (kept from original logic)
-     MapManager     — map definitions + card deck rendering
+     MapManager     — map definitions + map grid rendering
      IntroLiving    — canvas "living graph" idle animation
      Confetti       — victory canvas particle burst
      BoardRenderer  — draws the live game board (DOM based, like original)
@@ -930,9 +940,11 @@ class GraphAI{
 class BoardRenderer{
   static drawThumb(container, mapDef){
     container.innerHTML = '';
-    const scaleX = container.clientWidth ? container.clientWidth/900 : 1;
+    // NOTE: the container must already be attached to the document,
+    // otherwise clientWidth is 0 and the thumbnail collapses to scale(0).
+    const scale = container.clientWidth ? container.clientWidth/900 : 1;
     const svgWrap = document.createElement('div');
-    svgWrap.style.cssText = `position:absolute; inset:0; transform:scale(${container.clientWidth/900}); transform-origin: top left; width:900px; height:460px;`;
+    svgWrap.style.cssText = `position:absolute; inset:0; transform:scale(${scale}); transform-origin: top left; width:900px; height:460px;`;
     mapDef.edges.forEach(([u,v])=>{
       const a = mapDef.nodes[u], b = mapDef.nodes[v];
       const len = Math.hypot(b.x-a.x, b.y-a.y);
@@ -1016,10 +1028,7 @@ class Game{
     this.onFinished = null;
     this.buildNumpad();
     this.updateStatus();
-    if(!this.humanIsAttacker === false && !humanIsAttacker){
-      // defender case handled below uniformly
-    }
-    // If AI goes first in turn order? Attacker always assumed to start.
+    // Attacker always moves first; if the AI holds that role it opens.
     if(this.aiIsAttacker){ this.triggerAI(); }
   }
 
@@ -1108,7 +1117,7 @@ class Game{
 }
 
 /* ================================================================
-   UIManager — screens, transitions, deck, rules, role reveal,
+   UIManager — screens, transitions, map grid, rules, role reveal,
    union-find calculation animation, victory screen.
    ================================================================ */
 class UIManager{
@@ -1171,60 +1180,46 @@ class UIManager{
     await sleep(150);
 
     if(this.humanIsAttacker){
-      this.renderDeck();
       this.show('screen-mapselect');
+      this.renderDeck();
     } else {
       const randomIdx = Math.floor(Math.random()*MapManager.count());
       this.launchGame(randomIdx);
     }
   }
 
+  // Flat grid of map cards — no stacking, so nothing can be occluded.
   renderDeck(){
     const deck = $('#deck');
-    const dotsWrap = $('#deck-index');
-    deck.innerHTML = ''; dotsWrap.innerHTML = '';
-    const maps = MapManager.maps;
-    this.deckOrder = maps.map((_,i)=>i);
+    deck.innerHTML = '';
+    $('#deck-index').innerHTML = '';
 
-    maps.forEach((m, i)=>{
+    MapManager.maps.forEach((m, i)=>{
       const card = document.createElement('div');
       card.className = 'map-card';
-      const depth = maps.length - 1 - i;
-      card.style.zIndex = i;
-      card.style.transform = `translate(${depth*7}px, ${depth*10}px) rotate(${(i%2?1:-1)*depth*0.6}deg) scale(${1 - depth*0.02})`;
 
       const head = document.createElement('div');
       head.className = 'card-head';
       head.innerHTML = `<h3>${m.title}</h3><p>${m.desc}</p>`;
+
       const thumb = document.createElement('div');
       thumb.className = 'card-thumb';
 
       card.appendChild(head);
       card.appendChild(thumb);
-      BoardRenderer.drawThumb(thumb, m);
+      deck.appendChild(card);             // attach first so clientWidth is real
+      BoardRenderer.drawThumb(thumb, m);  // then render the thumbnail
 
-      card.addEventListener('mouseenter', ()=>{
-        card.style.transform = `translate(${depth*7}px, ${depth*10 - 26}px) rotate(0deg) scale(1.04)`;
-      });
-      card.addEventListener('mouseleave', ()=>{
-        card.style.transform = `translate(${depth*7}px, ${depth*10}px) rotate(${(i%2?1:-1)*depth*0.6}deg) scale(${1 - depth*0.02})`;
-      });
       card.addEventListener('click', ()=>this.flyCardToBoard(card, i));
-
-      deck.appendChild(card);
-
-      const dot = document.createElement('div');
-      dot.className = 'dot' + (i===0 ? ' active' : '');
-      dotsWrap.appendChild(dot);
     });
   }
 
   flyCardToBoard(card, mapIdx){
-    $$('.map-card').forEach(c=>{ if(c!==card){ c.style.transition='opacity .4s ease, transform .4s ease'; c.style.opacity='0'; c.style.pointerEvents='none'; } });
+    $$('.map-card').forEach(c=>{ if(c!==card) c.classList.add('dimmed'); });
     card.classList.add('flying');
-    card.style.transform = 'translate(0px,-40px) scale(1.5)';
+    card.style.transform = 'translateY(-14px) scale(1.08)';
     card.style.opacity = '0';
-    setTimeout(()=>{ this.launchGame(mapIdx); }, 520);
+    setTimeout(()=>{ this.launchGame(mapIdx); }, 400);
   }
 
   launchGame(mapIdx){
